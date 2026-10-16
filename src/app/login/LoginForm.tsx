@@ -23,7 +23,9 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  const sessionExpired = params.get('reason') === 'expired' && !login.isError && !login.isSuccess;
+  const reason = params.get('reason');
+  const isIdleTimeout = reason === 'idle_timeout';
+  const sessionExpired = (reason === 'expired' || isIdleTimeout) && !login.isError && !login.isSuccess;
   const errorMessage = login.isError ? getApiErrorMessage(login.error, 'Login failed.') : null;
   const busy = login.isPending || login.isSuccess;
 
@@ -119,7 +121,11 @@ export default function LoginForm() {
             ) : sessionExpired ? (
               <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                 <Clock size={18} className="flex-none mt-0.5 text-amber-400" />
-                Your session has expired. Please sign in again.
+                <span>
+                  {isIdleTimeout
+                    ? 'Sesi Anda telah berakhir secara otomatis karena tidak ada aktivitas selama 5 menit untuk alasan keamanan.'
+                    : 'Your session has expired. Please sign in again.'}
+                </span>
               </div>
             ) : null}
           </div>

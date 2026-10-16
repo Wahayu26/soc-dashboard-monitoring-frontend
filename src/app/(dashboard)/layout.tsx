@@ -11,6 +11,8 @@ import { useCurrentUser, useLogout } from '@/hooks/useAuth';
 import { useGlobalAlerts } from '@/hooks/useGlobalAlerts';
 import { useTvModeStore } from '@/store/tvModeStore';
 import { TvWallHud } from '@/components/kiosk/TvWallHud';
+import { useIdleTimeout } from '@/hooks/useIdleTimeout';
+import { IdleTimeoutModal } from '@/components/auth/IdleTimeoutModal';
 import { filterNavByPermissions, findNavItem } from '@/lib/navigation';
 import { hasPermission, useAuthStore } from '@/store/auth';
 
@@ -25,6 +27,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   // Application-wide real-time WebSocket incident listener
   useGlobalAlerts();
+
+  // 5-minute idle session timeout with 30s pre-warning
+  const { isWarningOpen, secondsRemaining, extendSession, handleLogout } = useIdleTimeout();
 
   // TV Wall Mode state
   const isTvActive = useTvModeStore((s) => s.isActive);
@@ -58,6 +63,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className={`flex h-screen w-full overflow-hidden bg-transparent transition-all duration-300 ease-in-out print:pl-0 print:h-auto print:overflow-visible ${containerPadding}`}>
       {/* TV Wall HUD Controller */}
       <TvWallHud />
+
+      {/* 5-Minute Inactivity Warning Dialog */}
+      <IdleTimeoutModal
+        isOpen={isWarningOpen}
+        secondsRemaining={secondsRemaining}
+        onExtend={extendSession}
+        onLogout={handleLogout}
+      />
 
       <div className={`print:hidden ${isTvActive ? 'hidden' : 'block'}`}>
         <Sidebar
