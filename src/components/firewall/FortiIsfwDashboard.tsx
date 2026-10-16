@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, getApiErrorMessage } from '@/lib/api';
 import {
@@ -27,7 +27,11 @@ import {
   Zap,
   CheckCircle2,
   Lock,
-  Network
+  Network,
+  Copy,
+  Check,
+  Eye,
+  X
 } from 'lucide-react';
 import {
   AreaChart,
@@ -42,6 +46,15 @@ import {
   Cell
 } from 'recharts';
 import { FortiIsfwReportExportModal } from './FortiIsfwReportExportModal';
+
+function formatBytes(bytes: number | string | null | undefined): string {
+  const n = Number(bytes || 0);
+  if (!n || n <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(n) / Math.log(k));
+  return `${parseFloat((n / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
 
 const PRESET_RANGES = [
   { id: '1h', label: '1 Hour' },
@@ -62,9 +75,42 @@ export function FortiIsfwDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'servers' | 'policies'>('overview');
   const [activeFilter, setActiveFilter] = useState<QuickFilter | null>(null);
   const [search, setSearch] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [logFeedMode, setLogFeedMode] = useState<'live' | 'snapshot'>('live');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Debounce search input to avoid hitting backend API on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Copy to clipboard helper
+  const handleCopy = useCallback((field: string, text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => {
+      setCopiedField((prev) => (prev === field ? null : prev));
+    }, 2000);
+  }, []);
+
+  // Close detail log modal on ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedLog(null);
+      }
+    };
+    if (selectedLog) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLog]);
 
   // 1. Fetch Summary Data (KPI, Charts, Top Ranks)
   const {
@@ -95,7 +141,7 @@ export function FortiIsfwDashboard() {
     refetch: refetchLogs,
     isFetching: isLogsFetching,
   } = useQuery({
-    queryKey: ['forti-isfw-logs', range, activeFilter?.field, activeFilter?.value, search],
+    queryKey: ['forti-isfw-logs', range, activeFilter?.field, activeFilter?.value, debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('type', 'logs');
@@ -106,8 +152,8 @@ export function FortiIsfwDashboard() {
         params.set('filter', activeFilter.field);
         params.set('value', activeFilter.value);
       }
-      if (search) {
-        params.set('q', search);
+      if (debouncedSearch) {
+        params.set('q', debouncedSearch);
       }
 
       const res = await api.get(`/forti/syslog?${params.toString()}`, {
@@ -141,6 +187,7 @@ export function FortiIsfwDashboard() {
   const handleClearFilter = () => {
     setActiveFilter(null);
     setSearch('');
+    setDebouncedSearch('');
   };
 
   const trendChartData = useMemo(() => {
@@ -150,6 +197,54 @@ export function FortiIsfwDashboard() {
       events: Number(t.total ?? t.value ?? 0),
     }));
   }, [charts.trend]);
+
+  // Client-side instant filtering on current logs batch
+  const filteredLogs = useMemo(() => {
+    if (!search.trim()) return logs;
+    const q = search.toLowerCase().trim();
+    return logs.filter((log: any) => {
+      const srcip = (log.srcip || '').toLowerCase();
+      const dstip = (log.dstip || '').toLowerCase();
+      const dstport = String(log.dstport || '');
+      const app = (log.app || '').toLowerCase();
+      const policyname = (log.policyname || '').toLowerCase();
+      const username = (log.username || '').toLowerCase();
+      const action = (log.action || '').toLowerCase();
+      const level = (log.level || '').toLowerCase();
+      const msg = (log.msg || '').toLowerCase();
+      const time = (log.log_time || log.received_time || '').toLowerCase();
+
+      return (
+        srcip.includes(q) ||
+        dstip.includes(q) ||
+        dstport.includes(q) ||
+        app.includes(q) ||
+        policyname.includes(q) ||
+        username.includes(q) ||
+        action.includes(q) ||
+        level.includes(q) ||
+        msg.includes(q) ||
+        time.includes(q)
+      );
+    });
+  }, [logs, search]);
+
+  const rangeDescription = useMemo(() => {
+    switch (range) {
+      case '1h':
+        return '5-minute rolling buckets of internal segmentation events across zones.';
+      case 'today':
+        return 'Hourly traffic distribution today across zones (00:00 to current hour).';
+      case '24h':
+        return '24-hour rolling hourly traffic volume trend across zones.';
+      case '7d':
+        return '7-day daily traffic volume and segmentation trend across zones.';
+      case '30d':
+        return '30-day historical segmentation traffic volume trends across zones.';
+      default:
+        return 'Internal segmentation traffic volume trends across zones.';
+    }
+  }, [range]);
 
   return (
     <div className="space-y-6">
@@ -390,17 +485,20 @@ export function FortiIsfwDashboard() {
         <div className="space-y-6">
           {/* Main Traffic Timeline Chart */}
           <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <Activity size={16} className="text-emerald-400" />
                   <span>East-West Inter-VLAN Traffic Volume Trend</span>
                 </h3>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  5-minute rolling buckets of internal segmentation events across zones.
+                  {rangeDescription}
                 </p>
               </div>
-              <span className="text-xs font-mono text-emerald-400">Live Time Series</span>
+              <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 w-fit">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>{PRESET_RANGES.find((r) => r.id === range)?.label || range} Series</span>
+              </span>
             </div>
 
             <div className="h-64 w-full">
@@ -424,6 +522,8 @@ export function FortiIsfwDashboard() {
                         fontSize: '11px',
                         fontFamily: 'monospace',
                       }}
+                      formatter={(val: any) => [`${Number(val).toLocaleString()} logs`, 'Traffic Volume']}
+                      labelFormatter={(label) => `Timestamp: ${label}`}
                     />
                     <Area
                       type="monotone"
@@ -722,12 +822,12 @@ export function FortiIsfwDashboard() {
       <div id="isfw-live-stream-section" className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4 relative overflow-hidden backdrop-blur-md">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Activity size={16} className="text-emerald-400" />
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                 <span>Internal Segmentation Live Syslog Stream</span>
                 <span className="text-xs font-mono text-emerald-400 font-normal">
-                  ({logs.length} Events Ingested)
+                  ({filteredLogs.length} of {logs.length} Events)
                 </span>
               </h3>
               <span className="flex h-2 w-2 relative">
@@ -741,7 +841,7 @@ export function FortiIsfwDashboard() {
           </div>
 
           {/* Stream Toolbar */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             {/* Mode Switcher: Live Stream vs Snapshot */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-[11px] font-mono">
               <button
@@ -769,33 +869,46 @@ export function FortiIsfwDashboard() {
               </button>
             </div>
 
-            {/* Keyword Search Input */}
+            {/* Keyword Search Input with Clear Button */}
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search IP, User, Policy, App..."
+                placeholder="Search IP, User, Policy, App, Action..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 w-48 sm:w-64"
+                className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 w-52 sm:w-72 transition-all"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded cursor-pointer transition-colors"
+                  title="Clear Search Filter"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Syslog Table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+        {/* Syslog Table with Vertical Scrollbar & Sticky Header */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[500px] rounded-xl border border-slate-800/80 shadow-inner bg-slate-950/40">
           <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 sticky top-0 z-10 shadow-sm backdrop-blur-md">
               <tr>
-                <th className="py-2.5 px-3">Timestamp</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Timestamp</th>
                 <th className="py-2.5 px-3">Action</th>
                 <th className="py-2.5 px-3">Source Node</th>
                 <th className="py-2.5 px-3">Destination Node</th>
                 <th className="py-2.5 px-3">Policy Rule</th>
                 <th className="py-2.5 px-3">Application</th>
                 <th className="py-2.5 px-3">User / Identity</th>
-                <th className="py-2.5 px-3 text-center">Inspect</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap">Detail Log</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -808,30 +921,51 @@ export function FortiIsfwDashboard() {
                     </div>
                   </td>
                 </tr>
-              ) : logs.length === 0 ? (
+              ) : filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-500 font-mono">
-                    No segmentation logs matching the current filter.
+                    {search ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span>No segmentation logs matching &quot;{search}&quot;.</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearch('');
+                            setDebouncedSearch('');
+                          }}
+                          className="text-emerald-400 hover:underline text-xs cursor-pointer font-bold"
+                        >
+                          Clear Search Filter
+                        </button>
+                      </div>
+                    ) : (
+                      'No segmentation logs matching the current filter.'
+                    )}
                   </td>
                 </tr>
               ) : (
-                logs.map((log: any, idx: number) => {
-                  const isDeny = (log.action || '').toLowerCase().includes('deny') ||
+                filteredLogs.map((log: any, idx: number) => {
+                  const isDeny =
+                    (log.action || '').toLowerCase().includes('deny') ||
                     (log.action || '').toLowerCase().includes('drop') ||
                     (log.action || '').toLowerCase().includes('block');
                   return (
                     <tr
                       key={log.id || idx}
                       onClick={() => setSelectedLog(log)}
-                      className="hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      className="hover:bg-slate-800/40 cursor-pointer transition-colors group"
                     >
                       <td className="py-2.5 px-3 text-slate-400 text-[11px] whitespace-nowrap">
                         {log.log_time || log.received_time}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isDeny ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        }`}>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            isDeny
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
                           {log.action}
                         </span>
                       </td>
@@ -885,7 +1019,9 @@ export function FortiIsfwDashboard() {
                           >
                             {log.app}
                           </button>
-                        ) : '-'}
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-slate-300">
                         {log.username && log.username !== '-' ? (
@@ -899,16 +1035,22 @@ export function FortiIsfwDashboard() {
                           >
                             {log.username}
                           </button>
-                        ) : '-'}
+                        ) : (
+                          '-'
+                        )}
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => setSelectedLog(log)}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                          title="Inspect raw event"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLog(log);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 hover:border-emerald-400 text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm group/btn"
+                          title="Buka Detail Log Lengkap"
                         >
-                          <ChevronRight size={14} />
+                          <Eye size={12} className="text-emerald-400 group-hover/btn:scale-110 transition-transform" />
+                          <span>Detail</span>
                         </button>
                       </td>
                     </tr>
@@ -920,81 +1062,255 @@ export function FortiIsfwDashboard() {
         </div>
       </div>
 
-      {/* Raw Event Detail Inspection Modal */}
+      {/* Comprehensive Raw Event Detail Inspection Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={18} className="text-emerald-400" />
-                <h3 className="text-sm font-bold text-slate-100 font-mono">
-                  FortiGate ISFW Syslog Event #{selectedLog.id}
-                </h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
+          onClick={() => setSelectedLog(null)}
+        >
+          <div
+            className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-100 font-mono">
+                      FortiGate ISFW Log Inspector
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                      #{selectedLog.id}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        (selectedLog.action || '').toLowerCase().includes('deny') ||
+                        (selectedLog.action || '').toLowerCase().includes('drop') ||
+                        (selectedLog.action || '').toLowerCase().includes('block')
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {selectedLog.action || 'ACCEPT'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {selectedLog.log_time || selectedLog.received_time} • Ingestion Verified
+                  </p>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedLog(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopy('all_json', JSON.stringify(selectedLog, null, 2))}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors cursor-pointer border border-slate-700"
+                  title="Copy Full Raw Log JSON"
+                >
+                  {copiedField === 'all_json' ? (
+                    <>
+                      <Check size={13} className="text-emerald-400" />
+                      <span className="text-emerald-400 font-bold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      <span>Copy JSON</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLog(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Close Inspector (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4 font-mono text-xs">
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Timestamp</span>
-                  <span className="text-slate-200">{selectedLog.log_time || selectedLog.received_time}</span>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 font-mono text-xs">
+              {/* Primary Network & Policy Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Source Node Details */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Globe size={14} className="text-emerald-400" />
+                      <span>Source Workload</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('srcip', selectedLog.srcip || '')}
+                      className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                      title="Copy Source IP"
+                    >
+                      {copiedField === 'srcip' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <span>{copiedField === 'srcip' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">IP Address:</span>
+                      <span className="text-slate-100 font-bold">{selectedLog.srcip || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">User / Host:</span>
+                      <span className="text-purple-300 font-medium truncate max-w-[170px]" title={selectedLog.username}>
+                        {selectedLog.username || '-'}
+                      </span>
+                    </div>
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetQuickFilter('src', selectedLog.srcip, `Source IP: ${selectedLog.srcip}`);
+                          setSelectedLog(null);
+                        }}
+                        className="w-full py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                      >
+                        Filter by this Source IP
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Action</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    (selectedLog.action || '').toLowerCase().includes('deny')
-                      ? 'bg-rose-500/20 text-rose-300'
-                      : 'bg-emerald-500/20 text-emerald-300'
-                  }`}>
-                    {selectedLog.action}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Source IP</span>
-                  <span className="text-slate-200">{selectedLog.srcip}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Destination IP &amp; Port</span>
-                  <span className="text-slate-200">{selectedLog.dstip}:{selectedLog.dstport}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Policy Rule</span>
-                  <span className="text-slate-200">{selectedLog.policyname || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Application</span>
-                  <span className="text-slate-200">{selectedLog.app || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">User / Workload Node</span>
-                  <span className="text-slate-200">{selectedLog.username || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Total Transferred</span>
-                  <span className="text-slate-200">{Number(selectedLog.totalbyte || 0).toLocaleString()} bytes</span>
+
+                {/* Destination Node Details */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Database size={14} className="text-teal-400" />
+                      <span>Destination Node</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('dstip', selectedLog.dstip || '')}
+                      className="text-[10px] text-slate-400 hover:text-teal-400 flex items-center gap-1 cursor-pointer"
+                      title="Copy Destination IP"
+                    >
+                      {copiedField === 'dstip' ? <Check size={11} className="text-teal-400" /> : <Copy size={11} />}
+                      <span>{copiedField === 'dstip' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">IP Address:</span>
+                      <span className="text-slate-100 font-bold">{selectedLog.dstip || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">Target Port:</span>
+                      <span className="text-teal-300 font-mono font-bold">
+                        {selectedLog.dstport ? `Port ${selectedLog.dstport}` : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">Geo Country:</span>
+                      <span className="text-slate-300">{selectedLog.dstcountry || 'Local / Private'}</span>
+                    </div>
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetQuickFilter('dst', selectedLog.dstip, `Dest IP: ${selectedLog.dstip}`);
+                          setSelectedLog(null);
+                        }}
+                        className="w-full py-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                      >
+                        Filter by this Dest IP
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Raw Syslog Payload</span>
-                <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap">
+              {/* Policy & Security Attributes */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
+                  <Layers size={14} className="text-cyan-400" />
+                  <span>Security &amp; Policy Attributes</span>
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Policy Rule</span>
+                    <span className="text-slate-100 font-bold block truncate" title={selectedLog.policyname}>
+                      {selectedLog.policyname || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Application</span>
+                    <span className="text-cyan-300 font-bold block truncate" title={selectedLog.app}>
+                      {selectedLog.app || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Severity / Level</span>
+                    <span className="text-amber-300 font-bold uppercase">{selectedLog.level || 'Notice'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Data Volume</span>
+                    <span className="text-emerald-300 font-bold">
+                      {formatBytes(selectedLog.totalbyte)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-1 flex gap-2">
+                  {selectedLog.policyname && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSetQuickFilter('policy', selectedLog.policyname, `Policy: ${selectedLog.policyname}`);
+                        setSelectedLog(null);
+                      }}
+                      className="px-3 py-1 rounded bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      Filter Policy &quot;{selectedLog.policyname}&quot;
+                    </button>
+                  )}
+                  {selectedLog.app && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSetQuickFilter('app', selectedLog.app, `App: ${selectedLog.app}`);
+                        setSelectedLog(null);
+                      }}
+                      className="px-3 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      Filter App &quot;{selectedLog.app}&quot;
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Raw Syslog Payload Box */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    Raw Telemetry Payload (JSON)
+                  </span>
+                  <span className="text-[10px] text-slate-500">Live Ingest Record</span>
+                </div>
+                <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto font-mono scrollbar-thin">
                   {JSON.stringify(selectedLog, null, 2)}
                 </pre>
               </div>
             </div>
 
-            <div className="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+            {/* Modal Footer */}
+            <div className="p-3.5 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500 font-mono">
+                Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px]">ESC</kbd> to close
+              </span>
               <button
                 type="button"
                 onClick={() => setSelectedLog(null)}
-                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold transition-colors cursor-pointer border border-slate-700"
               >
                 Close Inspector
               </button>
