@@ -632,7 +632,8 @@ export function PaloAltoDashboard() {
       {/* Primary Analytics Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Trend Timeline Chart */}
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4 lg:col-span-2">
+        <div className="relative p-6 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 shadow-xl space-y-4 lg:col-span-2 overflow-hidden backdrop-blur-md hover:border-slate-700/80 transition-all duration-300">
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-rose-500/25 to-transparent pointer-events-none" />
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
@@ -643,7 +644,7 @@ export function PaloAltoDashboard() {
                 Aggregated in 5-minute intervals &middot; Firewall drop &amp; threat volume surges.
               </p>
             </div>
-            <span className="text-[10px] font-mono text-slate-500 uppercase px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
+            <span className="text-[10px] font-mono text-slate-400 uppercase px-2.5 py-0.5 rounded-full bg-slate-950/90 border border-slate-800 shadow-inner">
               5-MIN BUCKET
             </span>
           </div>
@@ -675,9 +676,11 @@ export function PaloAltoDashboard() {
                     type="monotone"
                     dataKey="value"
                     stroke="#f43f5e"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     fill="url(#paloDropGrad)"
-                    isAnimationActive={false}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                    animationEasing="ease-out"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -690,13 +693,17 @@ export function PaloAltoDashboard() {
         </div>
 
         {/* Live Packet & Threat Stream Bar (SSE) */}
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-3 flex flex-col justify-between">
+        <div className="relative p-6 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 shadow-xl space-y-3 flex flex-col justify-between overflow-hidden backdrop-blur-md hover:border-slate-700/80 transition-all duration-300">
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/25 to-transparent pointer-events-none" />
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2">
-              <Radio size={15} className="text-cyan-400 animate-pulse" />
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
               <h3 className="text-sm font-bold text-slate-100">Live Real-time Packet Stream</h3>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 shadow-sm">
               BUFFER: {liveEvents.length}
             </span>
           </div>
@@ -711,11 +718,11 @@ export function PaloAltoDashboard() {
                   <div
                     key={evt.id || idx}
                     onClick={() => setInspectingLog(evt)}
-                    className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-cyan-500/40 transition-all text-xs font-mono space-y-1 cursor-pointer group"
+                    className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-900/80 hover:-translate-y-0.5 transition-all text-xs font-mono space-y-1.5 cursor-pointer group shadow-sm"
                   >
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="text-slate-500 truncate">{evt.event_time || evt.time || 'Now'}</span>
-                      <span className={`px-1.5 py-0.2 rounded font-bold uppercase ${
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         isDrop
                           ? 'bg-rose-500/15 text-rose-300 border border-rose-500/20'
                           : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
@@ -724,12 +731,12 @@ export function PaloAltoDashboard() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                      <span className="truncate text-cyan-300">{evt.source_ip || evt.src}</span>
-                      <ArrowRight size={10} className="text-slate-600 shrink-0 mx-1" />
+                      <span className="truncate text-cyan-300 font-semibold">{evt.source_ip || evt.src}</span>
+                      <ArrowRight size={10} className="text-slate-600 shrink-0 mx-1 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
                       <span className="truncate text-slate-200">{evt.destination_ip || evt.dst}:{evt.destination_port || evt.port}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-500">
-                      <span className="text-amber-400/90 truncate">{evt.application_name || evt.app || 'general'}</span>
+                      <span className="text-amber-400/90 truncate font-sans font-medium">{evt.application_name || evt.app || 'general'}</span>
                       <span className="truncate">{evt.rule_name || evt.rule || 'rule-default'}</span>
                     </div>
                   </div>
@@ -806,7 +813,8 @@ export function PaloAltoDashboard() {
       />
 
       {/* Forensic Log Explorer Table */}
-      <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
+      <div className="relative p-6 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 hover:border-slate-700/80 shadow-2xl backdrop-blur-xl space-y-4 overflow-hidden transition-all duration-300">
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent pointer-events-none" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
             <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
@@ -856,7 +864,7 @@ export function PaloAltoDashboard() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search IP, app, rule, port..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 font-mono"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 font-mono transition-colors"
               />
               {search && (
                 <button
@@ -938,29 +946,42 @@ export function PaloAltoDashboard() {
                   <tr
                     key={log.id || idx}
                     onClick={() => setInspectingLog(log)}
-                    className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${
-                      logFeedMode === 'live' && idx === 0 && !hasCustomFilter
-                        ? 'bg-cyan-950/20 border-l-2 border-emerald-400'
-                        : ''
-                    }`}
+                    className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
                   >
-                    <td className="px-3.5 py-2.5 text-slate-400">{log.event_time || log.time || '-'}</td>
+                    <td className="px-3.5 py-2.5 text-slate-400">
+                      <div className="flex items-center gap-2">
+                        {logFeedMode === 'live' && idx === 0 && !hasCustomFilter && (
+                          <span className="relative flex h-2 w-2 flex-shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                          </span>
+                        )}
+                        <span>{log.event_time || log.time || '-'}</span>
+                      </div>
+                    </td>
                     <td className="px-3.5 py-2.5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         isThreat
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
                           : isDrop
-                          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
-                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                          ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 shadow-[0_0_8px_rgba(244,63,94,0.15)]'
+                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_8px_rgba(52,211,153,0.15)]'
                       }`}>
-                        {log.action}
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          isThreat ? 'bg-amber-400' : isDrop ? 'bg-rose-400' : 'bg-emerald-400'
+                        }`} />
+                        <span>{log.action}</span>
                       </span>
                     </td>
                     <td className="px-3.5 py-2.5 text-cyan-300 font-bold">{log.source_ip || log.src}</td>
                     <td className="px-3.5 py-2.5 text-slate-200">
                       {log.destination_ip || log.dst}:{log.destination_port || log.port}
                     </td>
-                    <td className="px-3.5 py-2.5 text-amber-400 font-semibold">{log.application_name || log.app || '-'}</td>
+                    <td className="px-3.5 py-2.5">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-sans font-semibold">
+                        {log.application_name || log.app || '-'}
+                      </span>
+                    </td>
                     <td className="px-3.5 py-2.5 text-slate-300 max-w-xs truncate" title={log.rule_name || log.rule}>
                       {log.rule_name || log.rule || '-'}
                     </td>
@@ -1052,33 +1073,96 @@ export function PaloAltoDashboard() {
 
 // KPI Metric Card Subcomponent
 function KpiCard({ label, value, subtitle, color = 'slate', alert = false, onClick }: any) {
-  const colorStyles: Record<string, string> = {
-    slate: 'hover:border-slate-700 text-slate-100',
-    emerald: 'border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400',
-    rose: 'border-rose-500/20 hover:border-rose-500/40 text-rose-400',
-    amber: 'border-amber-500/20 hover:border-amber-500/40 text-amber-400',
-    violet: 'border-violet-500/20 hover:border-violet-500/40 text-violet-400',
-    cyan: 'border-cyan-500/20 hover:border-cyan-500/40 text-cyan-400',
-    blue: 'border-blue-500/20 hover:border-blue-500/40 text-blue-400',
-    teal: 'border-teal-500/20 hover:border-teal-500/40 text-teal-400',
+  const colorConfig: Record<string, { border: string; glow: string; text: string; topBar: string; dot: string }> = {
+    slate: {
+      border: 'border-slate-800/80 hover:border-slate-700',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(148,163,184,0.1)]',
+      text: 'text-slate-100',
+      topBar: 'bg-slate-500/50',
+      dot: 'bg-slate-400',
+    },
+    emerald: {
+      border: 'border-emerald-500/25 hover:border-emerald-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(52,211,153,0.15)]',
+      text: 'text-emerald-400',
+      topBar: 'bg-gradient-to-r from-emerald-500 to-teal-400',
+      dot: 'bg-emerald-400',
+    },
+    rose: {
+      border: 'border-rose-500/25 hover:border-rose-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(244,63,94,0.2)]',
+      text: 'text-rose-400',
+      topBar: 'bg-gradient-to-r from-rose-500 to-red-400',
+      dot: 'bg-rose-400',
+    },
+    amber: {
+      border: 'border-amber-500/25 hover:border-amber-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.2)]',
+      text: 'text-amber-400',
+      topBar: 'bg-gradient-to-r from-amber-500 to-orange-400',
+      dot: 'bg-amber-400',
+    },
+    violet: {
+      border: 'border-violet-500/25 hover:border-violet-500/40',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.15)]',
+      text: 'text-violet-400',
+      topBar: 'bg-gradient-to-r from-violet-500 to-purple-400',
+      dot: 'bg-violet-400',
+    },
+    cyan: {
+      border: 'border-cyan-500/25 hover:border-cyan-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(6,182,212,0.15)]',
+      text: 'text-cyan-400',
+      topBar: 'bg-gradient-to-r from-cyan-500 to-blue-400',
+      dot: 'bg-cyan-400',
+    },
+    blue: {
+      border: 'border-blue-500/25 hover:border-blue-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.15)]',
+      text: 'text-blue-400',
+      topBar: 'bg-gradient-to-r from-blue-500 to-cyan-400',
+      dot: 'bg-blue-400',
+    },
+    teal: {
+      border: 'border-teal-500/25 hover:border-teal-500/40',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(20,184,166,0.15)]',
+      text: 'text-teal-400',
+      topBar: 'bg-gradient-to-r from-teal-500 to-emerald-400',
+      dot: 'bg-teal-400',
+    },
   };
+
+  const cfg = colorConfig[color] || colorConfig.slate;
 
   return (
     <div
       onClick={onClick}
-      className={`p-4 rounded-xl bg-slate-900/80 border transition-all flex flex-col justify-between shadow-sm min-w-0 overflow-hidden ${
-        colorStyles[color] || colorStyles.slate
-      } ${onClick ? 'cursor-pointer hover:bg-slate-800/40' : ''}`}
+      className={`group relative p-3.5 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border backdrop-blur-md transition-all duration-300 ease-out flex flex-col justify-between min-w-0 overflow-hidden ${
+        cfg.border
+      } ${cfg.glow} ${
+        onClick ? 'cursor-pointer hover:-translate-y-1 hover:bg-slate-800/50 active:scale-[0.98]' : ''
+      }`}
     >
-      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider truncate block">
-        {label}
-      </span>
+      {/* Top micro luminous bar */}
+      <div className={`absolute top-0 left-0 right-0 h-[2px] ${cfg.topBar} opacity-70 group-hover:opacity-100 transition-opacity`} />
+
+      {/* Header row with micro dot */}
+      <div className="flex items-center justify-between gap-1 mb-1">
+        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider truncate block font-sans">
+          {label}
+        </span>
+        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} opacity-60 group-hover:opacity-100 group-hover:scale-125 transition-all`} />
+      </div>
+
+      {/* Main KPI Value */}
       <span className={`text-xl font-black font-mono tracking-tight my-1 truncate block ${
-        alert ? 'text-rose-400 animate-pulse' : ''
+        alert ? 'text-rose-400 animate-pulse drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]' : cfg.text
       }`}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </span>
-      <span className="text-[10px] text-slate-500 font-mono truncate block">
+
+      {/* Subtitle / Context note */}
+      <span className="text-[10px] text-slate-500 font-mono truncate block group-hover:text-slate-400 transition-colors">
         {subtitle}
       </span>
     </div>
@@ -1087,43 +1171,79 @@ function KpiCard({ label, value, subtitle, color = 'slate', alert = false, onCli
 
 // List Drilldown Panel Subcomponent
 function ListPanel({ title, subtitle, items, keyLabel, altKeyLabel, countLabel, color = 'cyan', onSelect }: any) {
-  const badgeColors: Record<string, string> = {
-    rose: 'bg-rose-500/10 text-rose-300 border-rose-500/20 group-hover:border-rose-500/40',
-    amber: 'bg-amber-500/10 text-amber-300 border-amber-500/20 group-hover:border-amber-500/40',
-    cyan: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20 group-hover:border-cyan-500/40',
-    violet: 'bg-violet-500/10 text-violet-300 border-violet-500/20 group-hover:border-violet-500/40',
+  const badgeColors: Record<string, { badge: string; bar: string; text: string }> = {
+    rose: {
+      badge: 'bg-rose-500/10 text-rose-300 border-rose-500/30 group-hover/row:border-rose-500/60 group-hover/row:bg-rose-500/20',
+      bar: 'bg-rose-500/10',
+      text: 'group-hover/row:text-rose-300',
+    },
+    amber: {
+      badge: 'bg-amber-500/10 text-amber-300 border-amber-500/30 group-hover/row:border-amber-500/60 group-hover/row:bg-amber-500/20',
+      bar: 'bg-amber-500/10',
+      text: 'group-hover/row:text-amber-300',
+    },
+    cyan: {
+      badge: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 group-hover/row:border-cyan-500/60 group-hover/row:bg-cyan-500/20',
+      bar: 'bg-cyan-500/10',
+      text: 'group-hover/row:text-cyan-300',
+    },
+    violet: {
+      badge: 'bg-violet-500/10 text-violet-300 border-violet-500/30 group-hover/row:border-violet-500/60 group-hover/row:bg-violet-500/20',
+      bar: 'bg-violet-500/10',
+      text: 'group-hover/row:text-violet-300',
+    },
   };
 
+  const theme = badgeColors[color] || badgeColors.cyan;
+  const maxCount = Math.max(...items.map((i: any) => Number(i[countLabel] || i.count || i.value || 1)), 1);
+
   return (
-    <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md flex flex-col justify-between space-y-3">
-      <div className="border-b border-slate-800/80 pb-2">
-        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">{title}</h4>
-        <p className="text-[10px] text-slate-400 font-mono">{subtitle}</p>
+    <div className="relative p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 hover:border-slate-700 shadow-xl backdrop-blur-md flex flex-col justify-between space-y-3 transition-all duration-300 overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent pointer-events-none" />
+
+      <div className="border-b border-slate-800/80 pb-2.5">
+        <h4 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center justify-between">
+          <span>{title}</span>
+          <span className="text-[10px] font-mono text-slate-500 font-normal">Top {items.length}</span>
+        </h4>
+        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{subtitle}</p>
       </div>
 
-      <div className="space-y-1.5 flex-1 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
+      <div className="space-y-1.5 flex-1 overflow-y-auto max-h-52 pr-1 custom-scrollbar">
         {items.map((item: any, idx: number) => {
           const val = item[keyLabel] || item[altKeyLabel] || item.label || 'Unknown';
-          const count = item[countLabel] || item.count || item.value || 1;
+          const count = Number(item[countLabel] || item.count || item.value || 1);
+          const percent = Math.min(Math.round((count / maxCount) * 100), 100);
 
           return (
             <button
               key={idx}
               type="button"
               onClick={() => onSelect && onSelect(val)}
-              className="w-full p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 transition-all flex items-center justify-between text-xs font-mono text-left cursor-pointer group"
+              className="relative w-full p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800/70 border border-slate-800/80 hover:border-slate-700/80 transition-all flex items-center justify-between text-xs font-mono text-left cursor-pointer group/row overflow-hidden"
             >
-              <span className="truncate max-w-[140px] text-slate-300 group-hover:text-cyan-300 transition-colors" title={val}>
-                {val}
-              </span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeColors[color]}`}>
-                {Number(count).toLocaleString()}
-              </span>
+              <div
+                className={`absolute left-0 top-0 bottom-0 ${theme.bar} transition-all duration-500 pointer-events-none rounded-l-xl`}
+                style={{ width: `${percent}%` }}
+              />
+
+              <div className="relative z-10 flex items-center gap-2 truncate max-w-[150px]">
+                <span className="text-[10px] text-slate-500 font-bold w-4 text-center">{idx + 1}</span>
+                <span className={`truncate text-slate-300 ${theme.text} transition-colors font-medium`} title={val}>
+                  {val}
+                </span>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border font-mono transition-all ${theme.badge}`}>
+                  {count.toLocaleString()}
+                </span>
+                <ChevronRight size={11} className="text-slate-600 group-hover/row:text-slate-300 group-hover/row:translate-x-0.5 transition-all" />
+              </div>
             </button>
           );
         })}
         {items.length === 0 && (
-          <p className="text-center text-slate-500 text-xs py-6 font-mono">No data</p>
+          <p className="text-center text-slate-500 text-xs py-6 font-mono">No telemetry in this range</p>
         )}
       </div>
     </div>

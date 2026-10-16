@@ -1532,43 +1532,98 @@ export function FortiFgdcDashboard() {
 
 // Subcomponent: KPI Metric Scorecard
 function KpiCard({ label, value, subtitle, color = 'slate', alert = false, onClick }: any) {
-  const colorStyles: Record<string, string> = {
-    slate: 'hover:border-slate-700 text-slate-100',
-    emerald: 'border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400',
-    rose: 'border-rose-500/20 hover:border-rose-500/40 text-rose-400',
-    amber: 'border-amber-500/20 hover:border-amber-500/40 text-amber-400',
-    violet: 'border-violet-500/20 hover:border-violet-500/40 text-violet-400',
-    cyan: 'border-cyan-500/20 hover:border-cyan-500/40 text-cyan-400',
-    blue: 'border-blue-500/20 hover:border-blue-500/40 text-blue-400',
-    teal: 'border-teal-500/20 hover:border-teal-500/40 text-teal-400',
+  const colorConfig: Record<string, { border: string; glow: string; text: string; topBar: string; dot: string }> = {
+    slate: {
+      border: 'border-slate-800/80 hover:border-slate-700',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(148,163,184,0.1)]',
+      text: 'text-slate-100',
+      topBar: 'bg-slate-500/50',
+      dot: 'bg-slate-400',
+    },
+    emerald: {
+      border: 'border-emerald-500/25 hover:border-emerald-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(52,211,153,0.15)]',
+      text: 'text-emerald-400',
+      topBar: 'bg-gradient-to-r from-emerald-500 to-teal-400',
+      dot: 'bg-emerald-400',
+    },
+    rose: {
+      border: 'border-rose-500/25 hover:border-rose-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(244,63,94,0.2)]',
+      text: 'text-rose-400',
+      topBar: 'bg-gradient-to-r from-rose-500 to-red-400',
+      dot: 'bg-rose-400',
+    },
+    amber: {
+      border: 'border-amber-500/25 hover:border-amber-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.2)]',
+      text: 'text-amber-400',
+      topBar: 'bg-gradient-to-r from-amber-500 to-orange-400',
+      dot: 'bg-amber-400',
+    },
+    violet: {
+      border: 'border-violet-500/25 hover:border-violet-500/40',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.15)]',
+      text: 'text-violet-400',
+      topBar: 'bg-gradient-to-r from-violet-500 to-purple-400',
+      dot: 'bg-violet-400',
+    },
+    cyan: {
+      border: 'border-cyan-500/25 hover:border-cyan-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(6,182,212,0.15)]',
+      text: 'text-cyan-400',
+      topBar: 'bg-gradient-to-r from-cyan-500 to-blue-400',
+      dot: 'bg-cyan-400',
+    },
+    blue: {
+      border: 'border-blue-500/25 hover:border-blue-500/50',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.15)]',
+      text: 'text-blue-400',
+      topBar: 'bg-gradient-to-r from-blue-500 to-cyan-400',
+      dot: 'bg-blue-400',
+    },
+    teal: {
+      border: 'border-teal-500/25 hover:border-teal-500/40',
+      glow: 'group-hover:shadow-[0_8px_25px_-5px_rgba(20,184,166,0.15)]',
+      text: 'text-teal-400',
+      topBar: 'bg-gradient-to-r from-teal-500 to-emerald-400',
+      dot: 'bg-teal-400',
+    },
   };
 
+  const cfg = colorConfig[color] || colorConfig.slate;
   const formattedValue = typeof value === 'number' ? value.toLocaleString() : value;
 
   return (
     <div
       onClick={onClick}
-      className={`p-3.5 rounded-2xl bg-slate-900/80 border transition-all duration-200 backdrop-blur-md ${
-        onClick ? 'cursor-pointer hover:scale-[1.02] hover:shadow-lg' : ''
-      } ${colorStyles[color] || colorStyles.slate}`}
+      className={`group relative p-3.5 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border backdrop-blur-md transition-all duration-300 ease-out flex flex-col justify-between min-w-0 overflow-hidden ${
+        cfg.border
+      } ${cfg.glow} ${
+        onClick ? 'cursor-pointer hover:-translate-y-1 hover:bg-slate-800/50 active:scale-[0.98]' : ''
+      }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider truncate">
+      {/* Top micro luminous bar */}
+      <div className={`absolute top-0 left-0 right-0 h-[2px] ${cfg.topBar} opacity-70 group-hover:opacity-100 transition-opacity`} />
+
+      {/* Header row with micro dot */}
+      <div className="flex items-center justify-between gap-1 mb-1">
+        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider truncate block font-sans">
           {label}
         </span>
-        {alert && (
-          <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-        )}
+        <span className={`w-1.5 h-1.5 rounded-full ${alert ? 'bg-rose-500 animate-ping' : `${cfg.dot} opacity-60 group-hover:opacity-100 group-hover:scale-125`} transition-all`} />
       </div>
 
-      <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className="text-lg lg:text-xl font-bold font-mono tracking-tight text-white truncate">
-          {formattedValue}
-        </span>
-      </div>
+      {/* Main KPI Value */}
+      <span className={`text-xl font-black font-mono tracking-tight my-1 truncate block ${
+        alert ? 'text-rose-400 animate-pulse drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]' : cfg.text
+      }`}>
+        {formattedValue}
+      </span>
 
+      {/* Subtitle / Context note */}
       {subtitle && (
-        <span className="mt-0.5 text-[10px] font-mono text-slate-500 block truncate">
+        <span className="text-[10px] text-slate-500 font-mono truncate block group-hover:text-slate-400 transition-colors">
           {subtitle}
         </span>
       )}

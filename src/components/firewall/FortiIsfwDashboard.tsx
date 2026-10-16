@@ -316,25 +316,27 @@ export function FortiIsfwDashboard() {
       {/* KPI Metric Scorecards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Total Segmentation Events */}
-        <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-lg relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="group relative p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 hover:border-slate-700 shadow-xl backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-slate-500/50 opacity-70 group-hover:opacity-100 transition-opacity" />
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Total Segmentation Logs</span>
-            <Activity size={16} className="text-emerald-400" />
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider">Total Segmentation Logs</span>
+            <Activity size={16} className="text-emerald-400 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black font-mono text-slate-100">
             {isSummaryLoading ? '...' : totalLogs.toLocaleString()}
           </div>
           <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <span>Real-time Inter-VLAN Telemetry</span>
           </div>
         </div>
 
         {/* Inter-VLAN Allowed Traffic */}
-        <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-lg relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="group relative p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-emerald-500/25 hover:border-emerald-500/50 shadow-xl backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_8px_25px_-5px_rgba(52,211,153,0.15)] overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 to-teal-400 opacity-70 group-hover:opacity-100 transition-opacity" />
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Inter-VLAN Allowed</span>
-            <CheckCircle2 size={16} className="text-emerald-400" />
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider">Inter-VLAN Allowed</span>
+            <CheckCircle2 size={16} className="text-emerald-400 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black font-mono text-emerald-400">
             {isSummaryLoading ? '...' : allowLogs.toLocaleString()}
@@ -345,10 +347,11 @@ export function FortiIsfwDashboard() {
         </div>
 
         {/* Interzone Denied / Lateral Drops */}
-        <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-lg relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="group relative p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-rose-500/25 hover:border-rose-500/50 shadow-xl backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_8px_25px_-5px_rgba(244,63,94,0.2)] overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-rose-500 to-red-400 opacity-70 group-hover:opacity-100 transition-opacity" />
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Interzone Denials / Drops</span>
-            <ShieldAlert size={16} className="text-rose-400" />
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider">Interzone Denials / Drops</span>
+            <ShieldAlert size={16} className="text-rose-400 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black font-mono text-rose-400">
             {isSummaryLoading ? '...' : denyLogs.toLocaleString()}
@@ -359,10 +362,11 @@ export function FortiIsfwDashboard() {
         </div>
 
         {/* UTM Inspection Hits */}
-        <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-lg relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="group relative p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-amber-500/25 hover:border-amber-500/50 shadow-xl backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.2)] overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500 to-orange-400 opacity-70 group-hover:opacity-100 transition-opacity" />
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider">UTM Threat Hits</span>
-            <Zap size={16} className="text-amber-400" />
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider">UTM Threat Hits</span>
+            <Zap size={16} className="text-amber-400 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black font-mono text-amber-400">
             {isSummaryLoading ? '...' : Number(kpi.utm || 0).toLocaleString()}
@@ -375,46 +379,46 @@ export function FortiIsfwDashboard() {
 
       {/* Secondary KPI Strip: App Control, Web Filter, SSL Deep Inspection, Server Time */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div className="group p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 backdrop-blur-md flex items-center justify-between transition-all hover:-translate-y-0.5 shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase text-slate-500 block">App Control Profiling</span>
+            <span className="text-[10px] font-sans uppercase font-bold text-slate-500 block">App Control Profiling</span>
             <span className="text-lg font-bold font-mono text-cyan-400">
               {Number(kpi.app || 0).toLocaleString()}
             </span>
           </div>
-          <Cpu size={18} className="text-cyan-400/60" />
+          <Cpu size={18} className="text-cyan-400/60 group-hover:text-cyan-400 transition-colors" />
         </div>
 
-        <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div className="group p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 backdrop-blur-md flex items-center justify-between transition-all hover:-translate-y-0.5 shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase text-slate-500 block">Web Filter Profiles</span>
+            <span className="text-[10px] font-sans uppercase font-bold text-slate-500 block">Web Filter Profiles</span>
             <span className="text-lg font-bold font-mono text-teal-400">
               {Number(kpi.web || 0).toLocaleString()}
             </span>
           </div>
-          <Globe size={18} className="text-teal-400/60" />
+          <Globe size={18} className="text-teal-400/60 group-hover:text-teal-400 transition-colors" />
         </div>
 
-        <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div className="group p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 backdrop-blur-md flex items-center justify-between transition-all hover:-translate-y-0.5 shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase text-slate-500 block">SSL / TLS Anomalies</span>
+            <span className="text-[10px] font-sans uppercase font-bold text-slate-500 block">SSL / TLS Anomalies</span>
             <span className="text-lg font-bold font-mono text-purple-400">
               {Number(kpi.ssl || 0).toLocaleString()}
             </span>
           </div>
-          <Lock size={18} className="text-purple-400/60" />
+          <Lock size={18} className="text-purple-400/60 group-hover:text-purple-400 transition-colors" />
         </div>
 
-        <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div className="group p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 backdrop-blur-md flex items-center justify-between transition-all hover:-translate-y-0.5 shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase text-slate-500 block">Ingestion Latency</span>
+            <span className="text-[10px] font-sans uppercase font-bold text-slate-500 block">Ingestion Latency</span>
             <span className="text-lg font-bold font-mono text-emerald-400">
               {rawLatest.ingest_lag_seconds !== undefined && rawLatest.ingest_lag_seconds !== null
                 ? `${rawLatest.ingest_lag_seconds}s lag`
                 : 'Sub-second'}
             </span>
           </div>
-          <Clock size={18} className="text-emerald-400/60" />
+          <Clock size={18} className="text-emerald-400/60 group-hover:text-emerald-400 transition-colors" />
         </div>
       </div>
 
