@@ -194,6 +194,19 @@ export function FortiFgdcDashboard() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Close inspect modal on ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setInspectingLog(null);
+      }
+    };
+    if (inspectingLog) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inspectingLog]);
+
   // Query: Main Forti FGDC Summary (KPIs, Charts, Top Dimensions)
   const summaryQuery = useQuery({
     queryKey: ['forti-fgdc-summary', range],
@@ -1118,11 +1131,11 @@ export function FortiFgdcDashboard() {
         )}
 
         {/* Scrollable Logs Table Container */}
-        <div className="max-h-[440px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
+        <div className="max-h-[500px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
           <table className="w-full text-left text-xs font-mono relative">
-            <thead className="sticky top-0 z-10 bg-slate-950/95 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 backdrop-blur-md">
+            <thead className="sticky top-0 z-10 bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 backdrop-blur-md">
               <tr>
-                <th className="py-2.5 px-3">Time (WIB)</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Time (WIB)</th>
                 <th className="py-2.5 px-3">Action</th>
                 <th className="py-2.5 px-3">Source IP</th>
                 <th className="py-2.5 px-3">Destination IP</th>
@@ -1130,7 +1143,7 @@ export function FortiFgdcDashboard() {
                 <th className="py-2.5 px-3">Policy Rule</th>
                 <th className="py-2.5 px-3">Workload / Node</th>
                 <th className="py-2.5 px-3 text-right">Volume</th>
-                <th className="py-2.5 px-3 text-center">Inspect</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap">Detail Log</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -1142,7 +1155,7 @@ export function FortiFgdcDashboard() {
                       <button
                         type="button"
                         onClick={handleClearFilter}
-                        className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono cursor-pointer transition-all inline-flex items-center gap-1"
+                        className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono cursor-pointer transition-all inline-flex items-center gap-1 font-bold"
                       >
                         <X size={11} />
                         <span>Clear All Filters</span>
@@ -1155,13 +1168,12 @@ export function FortiFgdcDashboard() {
                   const act = (log.action || '').toLowerCase();
                   const isDeny = act.includes('deny') || act.includes('block') || act.includes('drop');
                   const isAllow = act === 'accept' || act === 'allow' || act === 'close';
-                  const isRst = act.includes('rst');
 
                   return (
                     <tr
                       key={log.id || idx}
                       onClick={() => setInspectingLog(log)}
-                      className="hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      className="hover:bg-slate-800/40 cursor-pointer transition-colors group"
                     >
                       <td className="py-2 px-3 text-slate-500 text-[11px] whitespace-nowrap">
                         {log.log_time || log.received_time}
@@ -1190,10 +1202,19 @@ export function FortiFgdcDashboard() {
                       <td className="py-2 px-3 text-right text-teal-300 font-bold">
                         {formatBytes(Number(log.totalbyte || 0))}
                       </td>
-                      <td className="py-2 px-3 text-center">
-                        <span className="p-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 inline-flex items-center justify-center">
-                          <Eye size={12} />
-                        </span>
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectingLog(log);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 border border-cyan-500/30 hover:border-cyan-400 text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm group/btn"
+                          title="Buka Detail Log Lengkap"
+                        >
+                          <Eye size={12} className="text-cyan-400 group-hover/btn:scale-110 transition-transform" />
+                          <span>Detail</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1204,91 +1225,251 @@ export function FortiFgdcDashboard() {
         </div>
       </div>
 
-      {/* Draggable Log Inspect Modal Dialog */}
+      {/* Uniform Log Inspect Modal Dialog */}
       {inspectingLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150"
+          onClick={() => setInspectingLog(null)}
+        >
           <div
             style={inspectModal.modalStyle}
-            className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div
               {...inspectModal.dragHandleProps}
-              className={`p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 select-none ${
+              className={`p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90 select-none ${
                 inspectModal.isDragging ? 'cursor-grabbing' : 'cursor-grab'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                  <Network size={16} />
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-100 font-mono">
-                    FGDC Datacenter Packet Inspector &bull; ID: #{inspectingLog.id}
-                  </h4>
-                  <span className="text-[10px] text-slate-500 font-mono">{inspectingLog.log_time}</span>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-100 font-mono">
+                      FortiGate FGDC Log Inspector
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                      #{inspectingLog.id}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        (inspectingLog.action || '').toLowerCase().includes('deny') ||
+                        (inspectingLog.action || '').toLowerCase().includes('drop') ||
+                        (inspectingLog.action || '').toLowerCase().includes('block')
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {inspectingLog.action || 'ACCEPT'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {inspectingLog.log_time || inspectingLog.received_time} • Ingestion Verified
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2" data-no-drag>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(JSON.stringify(inspectingLog, null, 2), 'all_json')}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors cursor-pointer border border-slate-700"
+                  title="Copy Full Raw Log JSON"
+                >
+                  {copiedText === 'all_json' ? (
+                    <>
+                      <Check size={13} className="text-emerald-400" />
+                      <span className="text-emerald-400 font-bold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      <span>Copy JSON</span>
+                    </>
+                  )}
+                </button>
                 {inspectModal.isMoved && (
                   <button
                     type="button"
                     onClick={inspectModal.handleResetPosition}
-                    className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
                     title="Reset modal position"
                   >
-                    <RotateCcw size={13} />
+                    <RotateCcw size={14} />
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setInspectingLog(null)}
-                  className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Close Inspector (Esc)"
                 >
-                  <X size={15} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
             {/* Inspect Body */}
-            <div className="p-5 overflow-y-auto space-y-4 font-mono text-xs">
-              {/* Primary Packet Tuple */}
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Source Ingress:</span>
-                  <div className="text-blue-300 font-bold text-sm">{inspectingLog.srcip}</div>
-                  <div className="text-[10px] text-slate-400">Node: {inspectingLog.username || 'Unspecified'}</div>
+            <div className="p-6 overflow-y-auto space-y-5 font-mono text-xs">
+              {/* Primary Packet Tuple Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Source Node Details */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Globe size={14} className="text-blue-400" />
+                      <span>Source Workload</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(inspectingLog.srcip || '', 'srcip')}
+                      className="text-[10px] text-slate-400 hover:text-blue-400 flex items-center gap-1 cursor-pointer"
+                      title="Copy Source IP"
+                    >
+                      {copiedText === 'srcip' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <span>{copiedText === 'srcip' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">IP Address:</span>
+                      <span className="text-slate-100 font-bold">{inspectingLog.srcip || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">User / Host:</span>
+                      <span className="text-blue-300 font-medium truncate max-w-[170px]" title={inspectingLog.username}>
+                        {inspectingLog.username || 'Unspecified'}
+                      </span>
+                    </div>
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetQuickFilter('src', inspectingLog.srcip, `Source IP: ${inspectingLog.srcip}`);
+                          setInspectingLog(null);
+                        }}
+                        className="w-full py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                      >
+                        Filter by this Source IP
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Destination Target:</span>
-                  <div className="text-cyan-300 font-bold text-sm">{inspectingLog.dstip}:{inspectingLog.dstport}</div>
-                  <div className="text-[10px] text-slate-400">App: {inspectingLog.app || 'Unknown'}</div>
+
+                {/* Destination Node Details */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Database size={14} className="text-cyan-400" />
+                      <span>Destination Node</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(inspectingLog.dstip || '', 'dstip')}
+                      className="text-[10px] text-slate-400 hover:text-cyan-400 flex items-center gap-1 cursor-pointer"
+                      title="Copy Destination IP"
+                    >
+                      {copiedText === 'dstip' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <span>{copiedText === 'dstip' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">IP Address:</span>
+                      <span className="text-slate-100 font-bold">{inspectingLog.dstip || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">Target Port:</span>
+                      <span className="text-cyan-300 font-mono font-bold">
+                        {inspectingLog.dstport ? `Port ${inspectingLog.dstport}` : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 text-[11px]">Application:</span>
+                      <span className="text-slate-300">{inspectingLog.app || 'network'}</span>
+                    </div>
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetQuickFilter('dst', inspectingLog.dstip, `Dest IP: ${inspectingLog.dstip}`);
+                          setInspectingLog(null);
+                        }}
+                        className="w-full py-1 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                      >
+                        Filter by this Dest IP
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Policy & Action Details */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Action:</span>
-                  <span className="font-bold text-emerald-400 uppercase">{inspectingLog.action}</span>
+              {/* Policy & Security Attributes */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
+                  <Layers size={14} className="text-purple-400" />
+                  <span>Security &amp; Policy Attributes</span>
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Policy Rule</span>
+                    <span className="text-slate-100 font-bold block truncate" title={inspectingLog.policyname}>
+                      {inspectingLog.policyname || (inspectingLog.policyid !== undefined && inspectingLog.policyid !== null ? `Policy ${inspectingLog.policyid}` : 'Policy 0')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Action</span>
+                    <span className="text-emerald-400 font-bold uppercase">{inspectingLog.action}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Protocol / App</span>
+                    <span className="text-cyan-300 font-bold uppercase">{inspectingLog.app || 'network'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Data Volume</span>
+                    <span className="text-teal-300 font-bold">
+                      {formatBytes(Number(inspectingLog.totalbyte || 0))}
+                    </span>
+                  </div>
                 </div>
-                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Policy:</span>
-                  <span className="font-bold text-slate-200 truncate block">{inspectingLog.policyname || '-'}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                  <span className="text-[10px] text-slate-500 uppercase block">Bandwidth:</span>
-                  <span className="font-bold text-teal-300">{formatBytes(Number(inspectingLog.totalbyte || 0))}</span>
+
+                <div className="pt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pol = inspectingLog.policyname || (inspectingLog.policyid !== undefined && inspectingLog.policyid !== null ? `Policy ${inspectingLog.policyid}` : 'Policy 0');
+                      handleSetQuickFilter('policy', pol, `Policy: ${pol}`);
+                      setInspectingLog(null);
+                    }}
+                    className="px-3 py-1 rounded bg-slate-800 hover:bg-purple-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
+                  >
+                    Filter Policy
+                  </button>
+                  {inspectingLog.app && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSetQuickFilter('app', inspectingLog.app, `App: ${inspectingLog.app}`);
+                        setInspectingLog(null);
+                      }}
+                      className="px-3 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      Filter App &quot;{inspectingLog.app}&quot;
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Threat Intel Lookup Links */}
               {inspectingLog.srcip && (
-                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
                   <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
                     <ExternalLink size={11} />
-                    <span>External Threat Intelligence Feeds (Source IP: {inspectingLog.srcip}):</span>
+                    <span>External Threat Intelligence Feeds ({inspectingLog.srcip}):</span>
                   </span>
                   <div className="flex items-center gap-2 flex-wrap">
                     {ipIntelLinks(inspectingLog.srcip).map((link, i) => (
@@ -1297,7 +1478,7 @@ export function FortiFgdcDashboard() {
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-[11px] text-slate-300 hover:text-white border border-slate-800 flex items-center gap-1 transition-all"
+                        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-[11px] text-slate-300 hover:text-cyan-300 border border-slate-800 flex items-center gap-1 transition-all"
                       >
                         <span>{link.name}</span>
                         <ExternalLink size={10} className="opacity-60" />
@@ -1307,67 +1488,31 @@ export function FortiFgdcDashboard() {
                 </div>
               )}
 
-              {/* Raw Message Payload */}
+              {/* Raw Syslog Payload Box */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">Raw Log Message Payload:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(inspectingLog.raw_message || inspectingLog.msg || JSON.stringify(inspectingLog, null, 2), 'raw')}
-                    className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
-                  >
-                    {copiedText === 'raw' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                    <span>{copiedText === 'raw' ? 'Copied' : 'Copy Payload'}</span>
-                  </button>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    Raw Telemetry Payload (JSON)
+                  </span>
+                  <span className="text-[10px] text-slate-500">Live Ingest Record</span>
                 </div>
-                <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
+                <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto font-mono scrollbar-thin">
                   {inspectingLog.raw_message || inspectingLog.msg || JSON.stringify(inspectingLog, null, 2)}
                 </pre>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between" data-no-drag>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSetQuickFilter('src', inspectingLog.srcip, `Source: ${inspectingLog.srcip}`);
-                    setInspectingLog(null);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-all cursor-pointer"
-                >
-                  Filter Source IP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSetQuickFilter('dst', inspectingLog.dstip, `Destination: ${inspectingLog.dstip}`);
-                    setInspectingLog(null);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-all cursor-pointer"
-                >
-                  Filter Target IP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const pol = inspectingLog.policyname || `Policy ${inspectingLog.policyid ?? 0}`;
-                    handleSetQuickFilter('policy', pol, `Policy: ${pol}`);
-                    setInspectingLog(null);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-all cursor-pointer"
-                >
-                  Filter Policy
-                </button>
-              </div>
-
+            <div className="p-3.5 border-t border-slate-800 bg-slate-950 flex items-center justify-between" data-no-drag>
+              <span className="text-[11px] text-slate-500 font-mono">
+                Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px]">ESC</kbd> to close
+              </span>
               <button
                 type="button"
                 onClick={() => setInspectingLog(null)}
-                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold font-mono transition-all"
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold transition-colors cursor-pointer border border-slate-700"
               >
-                Close
+                Close Inspector
               </button>
             </div>
           </div>

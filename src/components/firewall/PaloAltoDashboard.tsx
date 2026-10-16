@@ -179,6 +179,17 @@ export function PaloAltoDashboard() {
     }
   };
 
+  // ESC key handler for inspector modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && inspectingLog) {
+        setInspectingLog(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inspectingLog]);
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -845,8 +856,18 @@ export function PaloAltoDashboard() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search IP, app, rule, port..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 font-mono"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 font-mono"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setDebouncedSearch(''); setPage(1); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
 
             {/* Quick Action Filter Tabs */}
@@ -892,9 +913,9 @@ export function PaloAltoDashboard() {
         </div>
 
         {/* Logs Table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 max-h-96 overflow-y-auto">
+        <div className="max-h-[500px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
           <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold sticky top-0 z-20 backdrop-blur-sm text-[10px] font-mono">
+            <thead className="bg-slate-950 text-slate-400 uppercase font-semibold sticky top-0 z-20 backdrop-blur-md text-[10px] font-mono border-b border-slate-800">
               <tr>
                 <th className="px-3.5 py-2.5 border-b border-slate-800">Time (WIB)</th>
                 <th className="px-3.5 py-2.5 border-b border-slate-800">Action</th>
@@ -904,7 +925,7 @@ export function PaloAltoDashboard() {
                 <th className="px-3.5 py-2.5 border-b border-slate-800">Security Rule</th>
                 <th className="px-3.5 py-2.5 border-b border-slate-800">Severity</th>
                 <th className="px-3.5 py-2.5 border-b border-slate-800">Country</th>
-                <th className="px-3.5 py-2.5 border-b border-slate-800 text-right">Inspect</th>
+                <th className="px-3.5 py-2.5 border-b border-slate-800 text-center whitespace-nowrap">Detail Log</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
@@ -955,17 +976,18 @@ export function PaloAltoDashboard() {
                       </span>
                     </td>
                     <td className="px-3.5 py-2.5 text-slate-400">{log.country || '-'}</td>
-                    <td className="px-3.5 py-2.5 text-right">
+                    <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setInspectingLog(log);
                         }}
-                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
-                        title="Inspect full syslog details"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 border border-cyan-500/30 hover:border-cyan-400 text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm group/btn"
+                        title="Buka Detail Log Lengkap"
                       >
-                        <Eye size={12} />
+                        <Eye size={12} className="text-cyan-400 group-hover/btn:scale-110 transition-transform" />
+                        <span>Detail</span>
                       </button>
                     </td>
                   </tr>
@@ -1127,8 +1149,12 @@ function LogInspectorModal({
   const { isMoved, dragHandleProps, modalStyle, handleResetPosition } = useDraggableModal();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden"
+    >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={modalStyle}
         className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col"
       >
@@ -1144,11 +1170,17 @@ function LogInspectorModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                  Firewall Log Inspector &middot; #{log.id}
+                  <span>Firewall Log Inspector</span>
+                  <span className="text-xs font-mono font-normal text-slate-400">
+                    #{log.id || 'EVT'}
+                  </span>
                 </h3>
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20">
                   <GripHorizontal size={12} />
                   <span>Draggable</span>
+                </span>
+                <span className="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-400 border border-slate-700">
+                  ESC to close
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-mono">
@@ -1157,6 +1189,24 @@ function LogInspectorModal({
             </div>
           </div>
           <div className="flex items-center gap-1.5" data-no-drag>
+            <button
+              type="button"
+              onClick={() => onCopy(JSON.stringify(log, null, 2))}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 text-xs font-mono flex items-center gap-1.5 transition-all border border-slate-700 cursor-pointer"
+              title="Copy complete log event JSON"
+            >
+              {copiedText === JSON.stringify(log, null, 2) ? (
+                <>
+                  <Check size={13} className="text-emerald-400" />
+                  <span className="text-emerald-400 font-bold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={13} />
+                  <span className="hidden sm:inline">Copy JSON</span>
+                </>
+              )}
+            </button>
             {isMoved && (
               <button
                 type="button"
