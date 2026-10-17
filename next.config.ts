@@ -29,18 +29,7 @@ const nextConfig: NextConfig = {
     ];
   },
   async redirects() {
-    return [
-      {
-        source: "/soc-dashboard-finale/:path*",
-        destination: "/login",
-        permanent: true,
-      },
-      {
-        source: "/soc-dashboard-finale-laravel/:path*",
-        destination: "/login",
-        permanent: true,
-      },
-    ];
+    return [];
   },
 };
 
