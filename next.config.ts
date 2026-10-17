@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async rewrites() {
+    return [
+      {
+        source: "/overview",
+        destination: "/",
+      },
+    ];
+  },
   async redirects() {
     return [
       {
