@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
         source: "/overview",
         destination: "/",
       },
+      {
+        source: "/soc-dashboard-finale",
+        destination: "/",
+      },
+      {
+        source: "/soc-dashboard-finale/",
+        destination: "/",
+      },
     ];
   },
   async redirects() {
