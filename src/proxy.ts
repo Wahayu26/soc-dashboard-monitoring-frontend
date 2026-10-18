@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const AUTH_FLAG_COOKIE = 'soc_auth';
-const PUBLIC_PATHS = ['/login'];
+const PUBLIC_PATHS = ['/login', '/soc-dashboard-finale/login'];
 
 /**
  * Optimistic route guard (Next 16 `proxy`, formerly `middleware`).

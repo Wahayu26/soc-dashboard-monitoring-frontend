@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
         source: "/soc-dashboard-finale/",
         destination: "/",
       },
+      {
+        source: "/soc-dashboard-finale/:path*",
+        destination: "/:path*",
+      },
     ];
   },
   async redirects() {
