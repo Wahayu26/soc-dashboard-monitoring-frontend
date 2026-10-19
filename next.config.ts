@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
         destination: "/",
       },
       {
+        source: "/soc-dashboard-finale/login.php",
+        destination: "/",
+      },
+      {
         source: "/soc-dashboard-finale",
         destination: "/",
       },
