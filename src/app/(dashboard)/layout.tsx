@@ -38,14 +38,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   useCurrentUser(hydrated);
 
   // Guard: unauthenticated requests must authenticate at Sentinel SOC login page
+  const isSanctumToken = Boolean(
+    token && (token.includes('|') || (!token.startsWith('portal_synced') && !token.startsWith('portal_sso')))
+  );
+
   useEffect(() => {
-    if (hydrated && !token) {
+    if (!hydrated) return;
+
+    if (!token || !isSanctumToken) {
+      if (token && !isSanctumToken) {
+        useAuthStore.getState().clearAuth();
+      }
       router.replace(`/soc-dashboard-finale/login?next=${encodeURIComponent(pathname)}`);
     }
-  }, [hydrated, token, pathname, router]);
+  }, [hydrated, token, isSanctumToken, pathname, router]);
 
-  if (!hydrated || !token) {
-    return <FullscreenLoader label="Authenticating Sentinel SOC Command Center..." />;
+  if (!hydrated || !token || !isSanctumToken) {
+    return <FullscreenLoader label="Directing to Sentinel SOC Login..." />;
   }
 
   const groups = filterNavByPermissions(user?.permissions ?? []);
