@@ -49,9 +49,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       if (token && !isSanctumToken) {
         useAuthStore.getState().clearAuth();
       }
-      router.replace(`/soc-dashboard-finale/login?next=${encodeURIComponent(pathname)}`);
+      if (typeof window !== 'undefined') {
+        window.location.replace(`/soc-dashboard-finale/login?next=${encodeURIComponent(pathname)}`);
+      }
     }
-  }, [hydrated, token, isSanctumToken, pathname, router]);
+  }, [hydrated, token, isSanctumToken, pathname]);
 
   if (!hydrated || !token || !isSanctumToken) {
     return <FullscreenLoader label="Directing to Sentinel SOC Login..." />;

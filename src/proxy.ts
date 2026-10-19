@@ -14,7 +14,9 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
   if (!isAuthed && !isPublic) {
-    const url = new URL('/soc-dashboard-finale/login', request.url);
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
+    const url = new URL('/soc-dashboard-finale/login', `${proto}://${host}`);
     if (pathname !== '/' && pathname !== '/soc-dashboard-finale' && pathname !== '/soc-dashboard-finale/') {
       url.searchParams.set('next', pathname + search);
     }
@@ -22,7 +24,9 @@ export function proxy(request: NextRequest) {
   }
 
   if (isAuthed && isPublic) {
-    return NextResponse.redirect(new URL('/soc-dashboard-finale/', request.url));
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
+    return NextResponse.redirect(new URL('/soc-dashboard-finale/', `${proto}://${host}`));
   }
 
   return NextResponse.next();
