@@ -1,12 +1,30 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+const AUTH_FLAG_COOKIE = 'soc_auth';
+const PUBLIC_PATHS = ['/login', '/soc-dashboard-finale/login'];
+
 /**
- * Optimistic route proxy (Next.js 16).
- * Passthrough for all routes so portal access and direct navigation work seamlessly
- * without triggering login redirection loops.
+ * Route guard (Next.js 16).
+ * Ensures unauthenticated users land on /soc-dashboard-finale/login first.
  */
-export function proxy(_request: NextRequest) {
+export function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  const isAuthed = request.cookies.get(AUTH_FLAG_COOKIE)?.value === '1';
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+
+  if (!isAuthed && !isPublic) {
+    const url = new URL('/soc-dashboard-finale/login', request.url);
+    if (pathname !== '/' && pathname !== '/soc-dashboard-finale' && pathname !== '/soc-dashboard-finale/') {
+      url.searchParams.set('next', pathname + search);
+    }
+    return NextResponse.redirect(url);
+  }
+
+  if (isAuthed && isPublic) {
+    return NextResponse.redirect(new URL('/soc-dashboard-finale/', request.url));
+  }
+
   return NextResponse.next();
 }
 

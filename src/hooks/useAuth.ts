@@ -42,7 +42,7 @@ export function useLogout() {
     onSettled: () => {
       clearAuth();
       queryClient.clear();
-      router.replace('/login');
+      router.replace('/soc-dashboard-finale/login');
     },
   });
 }

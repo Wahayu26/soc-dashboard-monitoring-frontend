@@ -63,7 +63,7 @@ export function useIdleTimeout() {
     setIsWarningOpen(false);
     logout.mutate(undefined, {
       onSettled: () => {
-        router.replace('/login?reason=idle_timeout');
+        router.replace('/soc-dashboard-finale/login?reason=idle_timeout');
       },
     });
   }, [logout, router]);

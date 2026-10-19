@@ -19,13 +19,18 @@ export function getEcho() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).Pusher = Pusher;
 
-  const scheme = process.env.NEXT_PUBLIC_REVERB_SCHEME ?? 'http';
-  const port = Number(process.env.NEXT_PUBLIC_REVERB_PORT ?? 8080);
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const scheme = isHttps ? 'https' : (process.env.NEXT_PUBLIC_REVERB_SCHEME ?? 'http');
+  const wsHost =
+    typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+      ? window.location.hostname
+      : (process.env.NEXT_PUBLIC_REVERB_HOST ?? '127.0.0.1');
+  const port = isHttps ? 443 : Number(process.env.NEXT_PUBLIC_REVERB_PORT ?? 8080);
 
   echo = new Echo({
     broadcaster: 'reverb',
     key: process.env.NEXT_PUBLIC_REVERB_APP_KEY ?? '',
-    wsHost: process.env.NEXT_PUBLIC_REVERB_HOST ?? '127.0.0.1',
+    wsHost,
     wsPort: port,
     wssPort: port,
     forceTLS: scheme === 'https',

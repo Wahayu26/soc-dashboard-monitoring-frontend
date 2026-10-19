@@ -37,71 +37,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Keep permissions in sync with the backend.
   useCurrentUser(hydrated);
 
-  // Seamless Portal SSO & session guard
+  // Guard: unauthenticated requests must authenticate at Sentinel SOC login page
   useEffect(() => {
-    if (!hydrated) return;
-
-    if (!token) {
-      let adopted = false;
-      try {
-        const portalRaw = typeof window !== 'undefined' ? localStorage.getItem('clipan_portal_user') : null;
-        if (portalRaw) {
-          const portalUser = JSON.parse(portalRaw);
-          if (portalUser && (portalUser.isLoggedIn || portalUser.username)) {
-            useAuthStore.getState().setAuth(
-              portalUser.token || 'portal_sso_session',
-              {
-                id: portalUser.id || 1,
-                name: portalUser.name || 'Administrator',
-                username: portalUser.username || 'admin',
-                role: portalUser.role || 'Super User',
-                permissions: [
-                  'view dashboard',
-                  'view firewall',
-                  'view crowdstrike',
-                  'view cyberark',
-                  'view db-monitor',
-                  'view syslog',
-                  'view health',
-                  'manage alerts',
-                  'retry queue',
-                ],
-              }
-            );
-            adopted = true;
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      if (!adopted) {
-        useAuthStore.getState().setAuth(
-          'portal_sso_session',
-          {
-            id: 1,
-            name: 'Administrator',
-            username: 'admin',
-            role: 'Super User',
-            permissions: [
-              'view dashboard',
-              'view firewall',
-              'view crowdstrike',
-              'view cyberark',
-              'view db-monitor',
-              'view syslog',
-              'view health',
-              'manage alerts',
-              'retry queue',
-            ],
-          }
-        );
-      }
+    if (hydrated && !token) {
+      router.replace(`/soc-dashboard-finale/login?next=${encodeURIComponent(pathname)}`);
     }
-  }, [hydrated, token]);
+  }, [hydrated, token, pathname, router]);
 
-  if (!hydrated) {
-    return <FullscreenLoader label="Initializing Sentinel SOC..." />;
+  if (!hydrated || !token) {
+    return <FullscreenLoader label="Authenticating Sentinel SOC Command Center..." />;
   }
 
   const groups = filterNavByPermissions(user?.permissions ?? []);

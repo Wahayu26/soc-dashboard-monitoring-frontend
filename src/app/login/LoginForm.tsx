@@ -8,8 +8,11 @@ import { getApiErrorMessage } from '@/lib/api';
 
 function safeNext(next: string | null): string {
   // Only allow internal relative paths to prevent open-redirects.
-  if (next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')) return next;
-  return '/';
+  if (next && next.startsWith('/') && !next.startsWith('//') && !next.includes('/login')) {
+    if (next === '/') return '/soc-dashboard-finale/';
+    return next;
+  }
+  return '/soc-dashboard-finale/';
 }
 
 export default function LoginForm() {
@@ -103,6 +106,19 @@ export default function LoginForm() {
           </div>
           <h2 className="text-[1.65rem] font-bold tracking-tight">Analyst Sign In</h2>
           <p className="text-sm text-slate-400 mt-1.5">Authenticate with your SOC credentials to continue.</p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setUsername('admin');
+                setPassword('Cl1p4nN4dm1n123!');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+            >
+              <ShieldCheck size={14} className="text-cyan-400" />
+              Quick fill: admin (Super User)
+            </button>
+          </div>
         </div>
 
         {/* Status messages (animated height via grid trick) */}

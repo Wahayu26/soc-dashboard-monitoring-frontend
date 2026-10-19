@@ -2,7 +2,11 @@ import axios, { AxiosError } from 'axios';
 import { useAuthStore } from '@/store/auth';
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8000/api';
+  typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://127.0.0.1:8000/api')
+        : '/api')
+    : (process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://127.0.0.1:8000/api');
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -44,7 +48,7 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Global 401 handling: silently refresh token via API without redirecting away from dashboard
+// Global 401 handling: silently refresh token via API or redirect to SOC login
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -103,6 +107,12 @@ api.interceptors.response.use(
         }
       } catch (refreshErr) {
         processQueue(refreshErr, null);
+        // Wipe auth and redirect to SOC login page
+        useAuthStore.getState().clearAuth();
+        if (!window.location.pathname.includes('/login')) {
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.replace(`/soc-dashboard-finale/login?next=${next}&reason=expired`);
+        }
       } finally {
         isRefreshing = false;
       }
