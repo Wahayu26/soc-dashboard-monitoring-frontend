@@ -16,6 +16,8 @@ import { IdleTimeoutModal } from '@/components/auth/IdleTimeoutModal';
 import { filterNavByPermissions, findNavItem } from '@/lib/navigation';
 import { hasPermission, useAuthStore } from '@/store/auth';
 
+import LoginView from '@/components/auth/LoginView';
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const hydrated = useAuthHydrated();
@@ -44,19 +46,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-
-    if (!token || !isSanctumToken) {
-      if (token && !isSanctumToken) {
-        useAuthStore.getState().clearAuth();
-      }
-      if (typeof window !== 'undefined') {
-        window.location.replace(`/soc-dashboard-finale/login?next=${encodeURIComponent(pathname)}`);
-      }
+    if (token && !isSanctumToken) {
+      useAuthStore.getState().clearAuth();
     }
-  }, [hydrated, token, isSanctumToken, pathname]);
+  }, [hydrated, token, isSanctumToken]);
 
-  if (!hydrated || !token || !isSanctumToken) {
-    return <FullscreenLoader label="Directing to Sentinel SOC Login..." />;
+  if (!hydrated) {
+    return <FullscreenLoader label="Initializing Sentinel SOC..." />;
+  }
+
+  if (!token || !isSanctumToken) {
+    return <LoginView />;
   }
 
   const groups = filterNavByPermissions(user?.permissions ?? []);
