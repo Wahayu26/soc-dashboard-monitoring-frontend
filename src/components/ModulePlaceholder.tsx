@@ -11,7 +11,7 @@ export default function ModulePlaceholder({ title, description }: { title: strin
         <h2 className="text-2xl font-bold mb-2">{title}</h2>
         <p className="text-sm text-slate-400 mb-2">{description}</p>
         <p className="text-xs text-slate-500 mb-6">This module will be migrated in Phase 3 (data visualization).</p>
-        <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200">
+        <Link href="/overview" className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200">
           <ArrowLeft size={14} /> Back to Overview
         </Link>
       </div>

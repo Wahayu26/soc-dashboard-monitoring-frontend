@@ -15,7 +15,7 @@ export default function Forbidden({ permission }: { permission: string }) {
           permission. Contact a SOC administrator if you need access.
         </p>
         <Link
-          href="/"
+          href="/overview"
           className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors"
         >
           Back to Overview

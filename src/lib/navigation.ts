@@ -32,7 +32,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Main',
     items: [
-      { label: 'Overview', href: '/', icon: LayoutDashboard, permission: 'view dashboard', subtitle: 'Security Command Center' },
+      { label: 'Overview', href: '/overview', icon: LayoutDashboard, permission: 'view dashboard', subtitle: 'Security Command Center' },
     ],
   },
   {
@@ -76,7 +76,7 @@ const ALL_ITEMS = NAV_GROUPS.flatMap((g) => {
 
 /** Find the nav item that owns a pathname (longest prefix match). */
 export function findNavItem(pathname: string): NavItem | undefined {
-  if (pathname === '/') return ALL_ITEMS.find((i) => i.href === '/');
+  if (pathname === '/' || pathname === '/overview') return ALL_ITEMS.find((i) => i.href === '/overview');
   return ALL_ITEMS.filter((i) => i.href && i.href !== '/' && (pathname === i.href || pathname.startsWith(i.href + '/')))
     .sort((a, b) => (b.href?.length ?? 0) - (a.href?.length ?? 0))[0];
 }
