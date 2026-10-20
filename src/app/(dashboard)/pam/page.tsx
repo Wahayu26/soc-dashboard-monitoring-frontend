@@ -15,7 +15,7 @@ import {
 
 export default function PamDashboard() {
   const queryClient = useQueryClient();
-  const [range, setRange] = useState('1h');
+  const [range, setRange] = useState('7d');
   const [search, setSearch] = useState('');
   const [tableSearch, setTableSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

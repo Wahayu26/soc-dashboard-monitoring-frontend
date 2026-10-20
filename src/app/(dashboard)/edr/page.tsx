@@ -25,7 +25,7 @@ interface CrowdStrikeSummaryResponse {
 }
 
 export default function EdrDashboard() {
-  const [range, setRange] = useState('1h');
+  const [range, setRange] = useState('7d');
   const [search, setSearch] = useState('');
   const [tableSearch, setTableSearch] = useState('');
   // Use a debounced search value for the API call
