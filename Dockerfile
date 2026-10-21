@@ -16,7 +16,7 @@ ENV NODE_ENV=production
 
 # Build arguments for public env variables baked at build time
 ARG NEXT_PUBLIC_API_URL=/api
-ARG NEXT_PUBLIC_REVERB_APP_KEY=soc-reverb-key
+ARG NEXT_PUBLIC_REVERB_APP_KEY=soc_dashboard_reverb_key
 ARG NEXT_PUBLIC_REVERB_HOST=localhost
 ARG NEXT_PUBLIC_REVERB_PORT=8080
 ARG NEXT_PUBLIC_REVERB_SCHEME=http

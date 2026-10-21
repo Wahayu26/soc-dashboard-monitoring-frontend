@@ -19,22 +19,41 @@ export function useLiveChannel<T>(channel: string, event: string, onMessage: (pa
 
   useEffect(() => {
     const echo = getEcho();
-    if (!echo) return;
+    if (!echo) {
+      setStatus('offline');
+      return;
+    }
 
     const pusher = echo.connector?.pusher;
-    const onState = ({ current }: { current: string }) => {
-      setStatus(current === 'connected' ? 'live' : current === 'connecting' || current === 'initialized' ? 'connecting' : 'offline');
+    const updateStatus = () => {
+      const state = pusher?.connection?.state;
+      if (state === 'connected') {
+        setStatus('live');
+      } else if (state === 'connecting' || state === 'initialized') {
+        setStatus('connecting');
+      } else {
+        setStatus('offline');
+      }
     };
-    pusher?.connection.bind('state_change', onState);
-    onState({ current: pusher?.connection.state ?? 'connecting' });
 
-    const sub = echo.private(channel);
+    pusher?.connection?.bind('state_change', updateStatus);
+    pusher?.connection?.bind('connected', updateStatus);
+    pusher?.connection?.bind('disconnected', updateStatus);
+    pusher?.connection?.bind('unavailable', updateStatus);
+    pusher?.connection?.bind('failed', updateStatus);
+
+    updateStatus();
+
+    const sub = echo.channel(channel);
     sub.listen(`.${event}`, (payload: T) => handlerRef.current(payload));
-    sub.error?.(() => setStatus('offline'));
 
     return () => {
-      pusher?.connection.unbind('state_change', onState);
-      echo.leave(channel);
+      pusher?.connection?.unbind('state_change', updateStatus);
+      pusher?.connection?.unbind('connected', updateStatus);
+      pusher?.connection?.unbind('disconnected', updateStatus);
+      pusher?.connection?.unbind('unavailable', updateStatus);
+      pusher?.connection?.unbind('failed', updateStatus);
+      echo.leaveChannel(channel);
     };
   }, [channel, event]);
 

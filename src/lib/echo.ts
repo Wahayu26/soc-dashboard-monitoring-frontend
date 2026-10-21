@@ -26,10 +26,12 @@ export function getEcho() {
       ? window.location.hostname
       : (process.env.NEXT_PUBLIC_REVERB_HOST ?? '127.0.0.1');
   const port = isHttps ? 443 : Number(process.env.NEXT_PUBLIC_REVERB_PORT ?? 8080);
+  const rawKey = process.env.NEXT_PUBLIC_REVERB_APP_KEY;
+  const appKey = rawKey && rawKey !== 'soc-reverb-key' ? rawKey : 'soc_dashboard_reverb_key';
 
   echo = new Echo({
     broadcaster: 'reverb',
-    key: process.env.NEXT_PUBLIC_REVERB_APP_KEY ?? '',
+    key: appKey,
     wsHost,
     wsPort: port,
     wssPort: port,
