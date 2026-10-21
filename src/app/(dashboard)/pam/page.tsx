@@ -79,10 +79,13 @@ export default function PamDashboard() {
     window.open(`/pam/report?${params.toString()}`, '_blank');
   };
 
+  const queryLimit = range === '30d' ? 300 : range === '7d' ? 200 : 100;
+  const customParams = showCustomRange && customStart && customEnd ? `&start_date=${customStart}&end_date=${customEnd}` : '';
+
   const { data: rawData, isLoading } = useQuery({
-    queryKey: ['cyberark', range, debouncedSearch],
+    queryKey: ['cyberark', range, debouncedSearch, showCustomRange, customStart, customEnd],
     queryFn: async () => {
-      const res = await api.get(`/cyberark?action=summary&range=${range}&search=${encodeURIComponent(debouncedSearch)}`);
+      const res = await api.get(`/cyberark?action=summary&range=${range}&limit=${queryLimit}&search=${encodeURIComponent(debouncedSearch)}${customParams}`);
       return res.data;
     },
     refetchInterval: 60000,
@@ -408,6 +411,9 @@ export default function PamDashboard() {
             <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 shrink-0">
               <div className={`w-2 h-2 rounded-full ${liveStatus === 'live' ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]' : 'bg-slate-500'}`} />
               Live Audit Trail
+              <span className="text-xs font-mono font-normal text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/60">
+                {tableBucket ? `Bucket: ${tableBucket}` : showCustomRange && customStart && customEnd ? `${customStart} to ${customEnd}` : range.toUpperCase()} ({filteredLogs.length} events)
+              </span>
               
               {tableBucket && (
                 <button onClick={() => setTableBucket(null)} className="ml-3 px-3 py-1 bg-rose-500/20 border border-rose-500/50 text-rose-400 hover:bg-rose-500/30 hover:text-rose-300 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors shadow-[0_0_10px_rgba(244,63,94,0.15)] flex items-center gap-1">
@@ -465,7 +471,11 @@ export default function PamDashboard() {
                   {filteredLogs.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-slate-500 text-sm">
-                        {tableSearch ? 'No logs match your filter.' : 'No events found for this bucket.'}
+                        {tableSearch
+                          ? 'No logs match your search filter.'
+                          : tableBucket
+                          ? `No events found for bucket ${tableBucket}.`
+                          : `No audit events recorded within the selected ${showCustomRange ? 'custom date range' : range.toUpperCase()} window.`}
                       </td>
                     </tr>
                   )}

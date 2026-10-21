@@ -65,10 +65,13 @@ export default function EdrDashboard() {
     window.open(`/edr/report?${params.toString()}`, '_blank');
   };
   
+  const queryLimit = range === '30d' ? 300 : range === '7d' ? 200 : 100;
+  const customParams = showCustomRange && customStart && customEnd ? `&start_date=${customStart}&end_date=${customEnd}` : '';
+
   const { data: rawData, isLoading } = useQuery({
-    queryKey: ['crowdstrike', range, debouncedSearch],
+    queryKey: ['crowdstrike', range, debouncedSearch, showCustomRange, customStart, customEnd],
     queryFn: async () => {
-      const res = await api.get<CrowdStrikeSummaryResponse>(`/crowdstrike?action=summary&range=${range}&search=${encodeURIComponent(debouncedSearch)}`);
+      const res = await api.get<CrowdStrikeSummaryResponse>(`/crowdstrike?action=summary&range=${range}&limit=${queryLimit}&search=${encodeURIComponent(debouncedSearch)}${customParams}`);
       return res.data;
     },
     refetchInterval: 10000,
@@ -194,9 +197,13 @@ export default function EdrDashboard() {
           {['1h', 'today', '24h', '7d', '30d'].map(r => (
             <button
               key={r}
-              onClick={() => setRange(r)}
+              onClick={() => {
+                setRange(r);
+                setTableBucket(null);
+                setShowCustomRange(false);
+              }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${
-                range === r 
+                range === r && !showCustomRange
                   ? 'bg-orange-500/20 text-orange-300 shadow-[0_0_10px_rgba(249,115,22,0.2)]' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
               }`}
@@ -454,15 +461,16 @@ export default function EdrDashboard() {
       <div className="glass-card p-6 mt-2 flex flex-col">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            
             <div className={`w-2 h-2 rounded-full ${liveStatus === 'live' ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]' : 'bg-slate-500'}`} />
             Live Audit Trail
+            <span className="text-xs font-mono font-normal text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/60">
+              {tableBucket ? `Bucket: ${tableBucket}` : showCustomRange && customStart && customEnd ? `${customStart} to ${customEnd}` : range.toUpperCase()} ({filteredLogs.length} events)
+            </span>
             {tableBucket && (
               <button onClick={() => setTableBucket(null)} className="ml-3 px-3 py-1 bg-rose-500/20 border border-rose-500/50 text-rose-400 hover:bg-rose-500/30 hover:text-rose-300 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors shadow-[0_0_10px_rgba(244,63,94,0.15)] flex items-center gap-1">
                 Clear Filter <X size={12} />
               </button>
             )}
-
           </h3>
           
           {/* Local Table Search */}
@@ -514,7 +522,11 @@ export default function EdrDashboard() {
                 {filteredLogs.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-slate-500 text-sm">
-                      {tableSearch ? 'No logs match your filter.' : 'No events found matching your search.'}
+                      {tableSearch
+                        ? 'No logs match your search filter.'
+                        : tableBucket
+                        ? `No events found for bucket ${tableBucket}.`
+                        : `No audit events recorded within the selected ${showCustomRange ? 'custom date range' : range.toUpperCase()} window.`}
                     </td>
                   </tr>
                 )}
