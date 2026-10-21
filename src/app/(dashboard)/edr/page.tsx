@@ -131,6 +131,9 @@ export default function EdrDashboard() {
   const topAlerts = data?.panels?.alerts || [];
   const topHosts = data?.panels?.hosts || [];
   const topMitre = data?.panels?.mitre || [];
+  const windows = data?.panels?.windows || {};
+  const serverProfile = windows.profiles?.find((p: any) => p.profile === 'server');
+  const userProfile = windows.profiles?.find((p: any) => p.profile === 'user');
   
   const baseLogs = tableBucket ? (tableData || []) : logs;
   const filteredLogs = baseLogs.filter((log: any) => {
@@ -295,12 +298,13 @@ export default function EdrDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               
               <AreaChart data={
-                // Transform data: group by bucket and sum values
+                // Transform data: group by bucket and sum values, sorted chronologically
                 Object.values(trend.reduce((acc: any, curr: any) => {
-                  if (!acc[curr.bucket]) acc[curr.bucket] = { bucket: curr.bucket, bucket_start: curr.bucket_start, total: 0 };
-                  acc[curr.bucket].total += parseInt(curr.value || 0, 10);
+                  const key = curr.bucket_start || curr.bucket;
+                  if (!acc[key]) acc[key] = { bucket: curr.bucket, bucket_start: curr.bucket_start, total: 0 };
+                  acc[key].total += parseInt(curr.value || 0, 10);
                   return acc;
-                }, {}))
+                }, {})).sort((a: any, b: any) => (a.bucket_start || a.bucket).localeCompare(b.bucket_start || b.bucket))
               } margin={{ top: 10, right: 10, left: -20, bottom: 0 }} className="cursor-pointer" onClick={(e: any) => {
                 if (e?.activePayload?.[0]?.payload?.bucket_start) {
                   setTableBucket(e.activePayload[0].payload.bucket_start);
@@ -401,6 +405,48 @@ export default function EdrDashboard() {
             ))}
             {topAlerts.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No data available</p>}
           </div>
+        </div>
+      </div>
+
+      {/* Window Summary */}
+      <div className="min-w-0">
+        <div className="flex justify-between items-end mb-3 px-1">
+          <h3 className="text-lg font-bold text-slate-100">Window Summary</h3>
+          <p className="text-xs text-slate-500 font-mono">Anchored at {meta.anchor_time || meta.latest_time || 'now'}</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <WindowCard 
+            title="1H" 
+            total={windows.totals?.total_1h} 
+            server={serverProfile?.total_1h} 
+            user={userProfile?.total_1h} 
+          />
+          <WindowCard 
+            title="Today" 
+            total={windows.totals?.total_today} 
+            server={serverProfile?.total_today} 
+            user={userProfile?.total_today}
+            realtime={windows.totals?.realtime_today}
+            telegram={windows.totals?.telegram_today}
+          />
+          <WindowCard 
+            title="24H" 
+            total={windows.totals?.total_24h} 
+            server={serverProfile?.total_24h} 
+            user={userProfile?.total_24h} 
+          />
+          <WindowCard 
+            title="7D" 
+            total={windows.totals?.total_7d} 
+            server={serverProfile?.total_7d} 
+            user={userProfile?.total_7d} 
+          />
+          <WindowCard 
+            title="30D" 
+            total={windows.totals?.total_30d} 
+            server={serverProfile?.total_30d} 
+            user={userProfile?.total_30d} 
+          />
         </div>
       </div>
 
@@ -521,21 +567,21 @@ function MiniKpi({ title, value, subtitle, alert }: any) {
   );
 }
 
-function WindowCard({ title, data }: any) {
-  if (!data) return null;
-  
+function WindowCard({ title, total, server, user, realtime, telegram }: any) {
   return (
-    <div className="glass-card p-5 relative overflow-hidden group hover:border-orange-500/30 transition-colors">
+    <div className="glass-card p-5 relative overflow-hidden group hover:border-orange-500/30 transition-colors min-w-0">
       <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-orange-500/5 blur-xl group-hover:bg-orange-500/10 transition-all" />
       <h4 className="text-slate-100 text-sm font-black tracking-wide mb-3">{title}</h4>
-      <p className="text-3xl font-black text-orange-400 mb-3">{data.total || 0}</p>
+      <p className="text-3xl font-black text-orange-400 mb-3">{total || 0}</p>
       <div className="space-y-1">
-        <p className="text-[11px] text-slate-400">
-          <span className="text-slate-300 font-medium">{data.opened || 0}</span> opened | <span className="text-slate-300 font-medium">{data.created || 0}</span> created | <span className="text-slate-300 font-medium">{data.closed || 0}</span> closed
+        <p className="text-[11px] text-slate-400 truncate">
+          <span className="text-slate-300 font-medium">{server || 0}</span> server | <span className="text-slate-300 font-medium">{user || 0}</span> user
         </p>
-        <p className="text-[11px] text-slate-400">
-          <span className="text-slate-300 font-medium">{data.human_users || 0}</span> users | <span className="text-slate-300 font-medium">{data.distinct_sessions || 0}</span> correlated sessions
-        </p>
+        {(realtime !== undefined || telegram !== undefined) && (
+          <p className="text-[11px] text-slate-400 truncate">
+            <span className="text-slate-300 font-medium">{realtime || 0}</span> realtime | <span className="text-slate-300 font-medium">{telegram || 0}</span> telegram
+          </p>
+        )}
       </div>
     </div>
   );

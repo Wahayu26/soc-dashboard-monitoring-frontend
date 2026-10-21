@@ -308,7 +308,7 @@ export default function PamDashboard() {
           <div className="glass-card p-6 lg:col-span-2 flex flex-col gap-4 min-w-0">
             <div>
               <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">Session Activity Trend</h3>
-              <p className="text-xs text-slate-400">Created vs Closed Sessions over time (Click points to filter table)</p>
+              <p className="text-xs text-slate-400">Opened, Created, and Closed Sessions over time (Click points to filter table)</p>
             </div>
             <div className="h-[280px] w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -321,6 +321,10 @@ export default function PamDashboard() {
                   }
                 }}>
                   <defs>
+                    <linearGradient id="colorOpened" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
                     <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
@@ -337,6 +341,7 @@ export default function PamDashboard() {
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
                     cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '5 5' }}
                   />
+                  <Area type="monotone" dataKey="opened" stroke="#10b981" strokeWidth={2} fill="url(#colorOpened)" activeDot={{ r: 6, fill: '#10b981', stroke: '#0f172a', strokeWidth: 2, className: 'cursor-pointer hover:r-[8px]', onClick: (e: any, payload: any) => { if (payload?.payload?.bucket_start) { setTableBucket(payload.payload.bucket_start); } } }} />
                   <Area type="monotone" dataKey="created" stroke="#8b5cf6" strokeWidth={2} fill="url(#colorCreated)" activeDot={{ r: 6, fill: '#8b5cf6', stroke: '#0f172a', strokeWidth: 2, className: 'cursor-pointer hover:r-[8px]', onClick: (e: any, payload: any) => { if (payload?.payload?.bucket_start) { setTableBucket(payload.payload.bucket_start); } } }} />
                   <Area type="monotone" dataKey="closed" stroke="#06b6d4" strokeWidth={2} fill="url(#colorClosed)" activeDot={{ r: 6, fill: '#06b6d4', stroke: '#0f172a', strokeWidth: 2, className: 'cursor-pointer hover:r-[8px]', onClick: (e: any, payload: any) => { if (payload?.payload?.bucket_start) { setTableBucket(payload.payload.bucket_start); } } }} />
                 </AreaChart>
@@ -382,11 +387,12 @@ export default function PamDashboard() {
             <h3 className="text-lg font-bold text-slate-100">Window Summary</h3>
             <p className="text-xs text-slate-500 font-mono">Anchored at {meta.anchor_time}</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <WindowCard title="1H" data={windows['1h']} />
             <WindowCard title="Today" data={windows['today']} />
             <WindowCard title="24H" data={windows['24h']} />
             <WindowCard title="7D" data={windows['7d']} />
+            <WindowCard title="30D" data={windows['30d']} />
           </div>
         </div>
 
