@@ -150,7 +150,7 @@ export default function EdrDashboard() {
     );
   });
 
-  const collectorHealthy = meta.collector?.status === 'healthy' || meta.collector_health === 'healthy';
+  const collectorHealthy = meta.collector?.status === 'healthy' || meta.collector?.ok === true || meta.collector_health === 'healthy';
 
   return (
     <>

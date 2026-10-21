@@ -88,7 +88,7 @@ export default function PamDashboard() {
       const res = await api.get(`/cyberark?action=summary&range=${range}&limit=${queryLimit}&search=${encodeURIComponent(debouncedSearch)}${customParams}`);
       return res.data;
     },
-    refetchInterval: 60000,
+    refetchInterval: 10000,
   });
 
   const data = rawData?.data;
