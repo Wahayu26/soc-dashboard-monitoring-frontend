@@ -71,7 +71,7 @@ interface QuickFilter {
 }
 
 export function FortiIsfwDashboard() {
-  const [range, setRange] = useState<string>('today');
+  const [range, setRange] = useState<string>('1h');
   const [activeTab, setActiveTab] = useState<'overview' | 'servers' | 'policies'>('overview');
   const [activeFilter, setActiveFilter] = useState<QuickFilter | null>(null);
   const [search, setSearch] = useState<string>('');
@@ -128,8 +128,9 @@ export function FortiIsfwDashboard() {
       });
       return res.data;
     },
-    refetchInterval: logFeedMode === 'live' ? 30000 : false,
-    staleTime: 15000,
+    refetchInterval: logFeedMode === 'live' ? 15000 : false,
+    staleTime: 5000,
+    placeholderData: (previousData) => previousData,
   });
 
   // 2. Fetch Real-time Syslog Stream
@@ -161,8 +162,9 @@ export function FortiIsfwDashboard() {
       });
       return res.data;
     },
-    refetchInterval: logFeedMode === 'live' ? 10000 : false,
-    staleTime: 5000,
+    refetchInterval: logFeedMode === 'live' ? 5000 : false,
+    staleTime: 2000,
+    placeholderData: (previousData) => previousData,
   });
 
   const kpi = summaryData?.kpi || {};
@@ -270,20 +272,25 @@ export function FortiIsfwDashboard() {
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Preset Range Selector */}
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-xs font-mono">
-            {PRESET_RANGES.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setRange(r.id)}
-                className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
-                  range === r.id
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
+            {PRESET_RANGES.map((r) => {
+              const isSelected = range === r.id;
+              const isCurrentFetching = isSelected && (isSummaryFetching || isLogsFetching);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setRange(r.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {isCurrentFetching && <RefreshCw size={11} className="animate-spin text-white" />}
+                  <span>{r.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Refresh Button */}
@@ -838,6 +845,9 @@ export function FortiIsfwDashboard() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
+              {isLogsFetching && (
+                <RefreshCw size={12} className="animate-spin text-emerald-400 ml-1" />
+              )}
             </div>
             <p className="text-xs text-slate-400 font-mono mt-0.5">
               Authoritative real-time packet ingestion tail direct from FortiGate ISFW cluster.
