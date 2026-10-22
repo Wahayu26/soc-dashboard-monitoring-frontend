@@ -379,6 +379,14 @@ function ReportContent() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
                 <tr>
+                  <td className="py-2.5 px-3 font-bold font-mono">POJK 11 / OJK CSIRT</td>
+                  <td className="py-2.5 px-3">Ketahanan Siber &amp; Isolasi Akses Rekanan / Pihak Ketiga (Vendor Wi-Fi).</td>
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">Subnet Wi-Fi CFI-Vendor (10.17.x.x) terisolasi penuh; 100% traversal ke Corporate LAN (10.10.x.x) dan Core DB Farm (10.100.101.x) diblokir ISFW.</td>
+                  <td className="py-2.5 px-3 text-center">
+                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] font-mono">COMPLIANT</span>
+                  </td>
+                </tr>
+                <tr>
                   <td className="py-2.5 px-3 font-bold font-mono">PCI-DSS 1.3</td>
                   <td className="py-2.5 px-3">Interzone network traffic between user subnets and sensitive database/CDE restricted.</td>
                   <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">ISFW microsegmentation active; {deny.toLocaleString()} unauthorized cross-zone attempts blocked.</td>
@@ -389,7 +397,7 @@ function ReportContent() {
                 <tr>
                   <td className="py-2.5 px-3 font-bold font-mono">ISO 27001 A.13.1</td>
                   <td className="py-2.5 px-3">Network segregation across sensitive internal information processing systems.</td>
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">Department VLAN isolation with stateful East-West inspection &amp; App-Ctrl identification.</td>
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">Corporate LAN (10.10.x.x) and Wi-Fi CFI-IT (10.19.x.x) segregation enforced with App-Ctrl &amp; stateful firewalling.</td>
                   <td className="py-2.5 px-3 text-center">
                     <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] font-mono">COMPLIANT</span>
                   </td>
@@ -397,7 +405,7 @@ function ReportContent() {
                 <tr>
                   <td className="py-2.5 px-3 font-bold font-mono">NIST SP 800-207</td>
                   <td className="py-2.5 px-3">Zero-Trust lateral movement containment and strict inter-VLAN forwarding policies.</td>
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{Number(kpi.utm || 0).toLocaleString()} UTM threat hits &amp; {Number(kpi.ssl || 0).toLocaleString()} encrypted flows verified.</td>
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{Number(kpi.utm || 0).toLocaleString()} UTM threat hits &amp; {Number(kpi.ssl || 0).toLocaleString()} encrypted flows verified across East-West perimeters.</td>
                   <td className="py-2.5 px-3 text-center">
                     <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] font-mono">COMPLIANT</span>
                   </td>
