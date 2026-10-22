@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api, getApiErrorMessage } from '@/lib/api';
 import {
@@ -33,6 +34,7 @@ import {
   Eye,
   Play,
   Pause,
+  Wifi,
   X
 } from 'lucide-react';
 import {
@@ -72,6 +74,235 @@ interface QuickFilter {
   label?: string;
 }
 
+export interface SegmentInfo {
+  name: string;
+  shortName: string;
+  category: 'it-wifi' | 'vendor-wifi' | 'lan' | 'datacenter' | 'management' | 'core' | 'external' | 'other';
+  color: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  isCrownJewel?: boolean;
+}
+
+export function resolveNetworkSegment(ip?: string | null): SegmentInfo {
+  if (!ip) {
+    return {
+      name: 'Unknown Segment',
+      shortName: 'UNKNOWN',
+      category: 'other',
+      color: '#64748b',
+      badgeBg: 'bg-slate-800',
+      badgeText: 'text-slate-400',
+      badgeBorder: 'border-slate-700',
+    };
+  }
+
+  const cleanIp = ip.trim();
+
+  // 10.19.x.x -> Wi-Fi CFI-IT
+  if (cleanIp.startsWith('10.19.')) {
+    return {
+      name: 'Wi-Fi CFI-IT',
+      shortName: 'WIFI-IT',
+      category: 'it-wifi',
+      color: '#a855f7',
+      badgeBg: 'bg-purple-500/15',
+      badgeText: 'text-purple-300',
+      badgeBorder: 'border-purple-500/30',
+    };
+  }
+
+  // 10.17.x.x -> Wi-Fi CFI-Vendor (Third-party untrusted)
+  if (cleanIp.startsWith('10.17.')) {
+    return {
+      name: 'Wi-Fi CFI-Vendor',
+      shortName: 'WIFI-VENDOR',
+      category: 'vendor-wifi',
+      color: '#f59e0b',
+      badgeBg: 'bg-amber-500/15',
+      badgeText: 'text-amber-300',
+      badgeBorder: 'border-amber-500/30',
+    };
+  }
+
+  // 10.10.x.x -> Corporate LAN
+  if (cleanIp.startsWith('10.10.')) {
+    return {
+      name: 'Corporate LAN',
+      shortName: 'CORP-LAN',
+      category: 'lan',
+      color: '#3b82f6',
+      badgeBg: 'bg-blue-500/15',
+      badgeText: 'text-blue-300',
+      badgeBorder: 'border-blue-500/30',
+    };
+  }
+
+  // 10.100.101.x -> Core Datacenter / DB Farm (Crown Jewel)
+  if (cleanIp.startsWith('10.100.101.')) {
+    return {
+      name: 'DC Core / DB Farm',
+      shortName: 'DC-CORE-DB',
+      category: 'datacenter',
+      color: '#10b981',
+      badgeBg: 'bg-emerald-500/15',
+      badgeText: 'text-emerald-300',
+      badgeBorder: 'border-emerald-500/30',
+      isCrownJewel: true,
+    };
+  }
+
+  // 10.100.103.x -> IT Admin Management
+  if (cleanIp.startsWith('10.100.103.')) {
+    return {
+      name: 'IT Admin Mgmt',
+      shortName: 'IT-MGMT',
+      category: 'management',
+      color: '#06b6d4',
+      badgeBg: 'bg-cyan-500/15',
+      badgeText: 'text-cyan-300',
+      badgeBorder: 'border-cyan-500/30',
+      isCrownJewel: true,
+    };
+  }
+
+  // 10.100.x.x -> Datacenter Subnet
+  if (cleanIp.startsWith('10.100.')) {
+    return {
+      name: 'Datacenter Subnet',
+      shortName: 'DC-INFRA',
+      category: 'datacenter',
+      color: '#14b8a6',
+      badgeBg: 'bg-teal-500/15',
+      badgeText: 'text-teal-300',
+      badgeBorder: 'border-teal-500/30',
+    };
+  }
+
+  if (cleanIp.startsWith('10.')) {
+    return {
+      name: 'Internal Subnet',
+      shortName: 'INTERNAL',
+      category: 'other',
+      color: '#64748b',
+      badgeBg: 'bg-slate-800',
+      badgeText: 'text-slate-300',
+      badgeBorder: 'border-slate-700',
+    };
+  }
+
+  return {
+    name: 'External WAN',
+    shortName: 'WAN-INET',
+    category: 'external',
+    color: '#94a3b8',
+    badgeBg: 'bg-slate-900',
+    badgeText: 'text-slate-400',
+    badgeBorder: 'border-slate-800',
+  };
+}
+
+export interface LateralThreatInfo {
+  isHighRisk: boolean;
+  threatTitle: string;
+  mitreId: string;
+  technique: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  description: string;
+}
+
+export function detectLateralThreat(log: any): LateralThreatInfo | null {
+  if (!log) return null;
+  const action = (log.action || '').toLowerCase();
+  const isDeny = action.includes('deny') || action.includes('drop') || action.includes('block');
+  if (!isDeny) return null;
+
+  const port = Number(log.dstport || 0);
+  const app = (log.app || '').toUpperCase();
+
+  // SMB / Lateral Movement
+  if (port === 445 || port === 139 || app.includes('SMB')) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Lateral SMB Spreading / Exploitation Attempt',
+      mitreId: 'T1021.002',
+      technique: 'SMB/Windows Admin Shares',
+      severity: 'CRITICAL',
+      description: 'Host attempting unauthorized East-West SMB probe. Primary vector for ransomware replication, PsExec, and lateral traversal.',
+    };
+  }
+
+  // RDP / Remote Desktop
+  if (port === 3389 || app.includes('RDP')) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Unauthorized Lateral RDP Probe',
+      mitreId: 'T1021.001',
+      technique: 'Remote Desktop Protocol',
+      severity: 'HIGH',
+      description: 'Host attempting unpermitted GUI remote desktop connection across network segmentation boundaries.',
+    };
+  }
+
+  // SSH
+  if (port === 22 || app.includes('SSH')) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Lateral SSH Brute-Force / Probe',
+      mitreId: 'T1021.004',
+      technique: 'SSH Remote Services',
+      severity: 'HIGH',
+      description: 'Unauthorized command-line terminal connection attempt between internal segments.',
+    };
+  }
+
+  // RPC / WinRM / WMI
+  if (port === 135 || port === 5985 || port === 5986 || app.includes('RPC') || app.includes('WINRM')) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Remote Management / WMI Lateral Probe',
+      mitreId: 'T1047 / T1021.006',
+      technique: 'Windows Management Instrumentation',
+      severity: 'CRITICAL',
+      description: 'Unauthorized East-West RPC/WinRM reconnaissance attempt. High-confidence indicator of active intrusion.',
+    };
+  }
+
+  // Database Probes
+  if ([1433, 1521, 3306, 5432].includes(port) || ['MSSQL', 'ORACLE', 'MYSQL', 'POSTGRESQL'].some((d) => app.includes(d))) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Direct Database Injection / Probe',
+      mitreId: 'T1046',
+      technique: 'Network Service Discovery',
+      severity: 'CRITICAL',
+      description: 'Host attempting to bypass application tier to directly probe raw database ports.',
+    };
+  }
+
+  // Kerberos / LDAP
+  if ([88, 389, 636].includes(port) || ['KERBEROS', 'LDAP'].some((d) => app.includes(d))) {
+    return {
+      isHighRisk: true,
+      threatTitle: 'Domain Reconnaissance / Kerberoasting Probe',
+      mitreId: 'T1558 / T1087',
+      technique: 'Steal or Forge Kerberos Tickets',
+      severity: 'HIGH',
+      description: 'Probing internal identity infrastructure across network segmentation boundaries.',
+    };
+  }
+
+  return {
+    isHighRisk: false,
+    threatTitle: 'Inter-VLAN Segmentation Policy Violation',
+    mitreId: 'TA0008',
+    technique: 'Lateral Movement Blocked',
+    severity: 'MEDIUM',
+    description: 'Traffic blocked according to Zero-Trust microsegmentation policy rule.',
+  };
+}
+
 const SAMPLE_ISFW_ALERTS = [
   { action: 'deny', srcip: '10.19.0.165', dstip: '10.10.0.206', dstport: '7680', app: 'SMB', policyname: 'CFT Vendor to INET ..', username: 'CLIPAN', level: 'warning', dstcountry: 'Reserved', totalbyte: 0, type: 'traffic', subtype: 'forward', msg: 'Security Alert: Drop inter-VLAN lateral access without explicit permit' },
   { action: 'deny', srcip: '10.17.0.37', dstip: '10.100.101.231', dstport: '445', app: 'SMB', policyname: 'Zero-Trust Deny Rule', username: 'svc_backup', level: 'warning', dstcountry: 'Reserved', totalbyte: 0, type: 'traffic', subtype: 'forward', msg: 'Security Alert: Lateral SMB replication inspection denied' },
@@ -102,6 +333,8 @@ export function FortiIsfwDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [logFeedMode, setLogFeedMode] = useState<'live' | 'snapshot'>('live');
   const [actionFilter, setActionFilter] = useState<'all' | 'deny' | 'accept'>('all');
+  const [segmentFilter, setSegmentFilter] = useState<string>('all');
+  const [lateralThreatOnly, setLateralThreatOnly] = useState(false);
   const [livePaused, setLivePaused] = useState(false);
   const [liveEvents, setLiveEvents] = useState<any[]>([]);
   const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'paused' | 'error'>('connecting');
@@ -322,19 +555,35 @@ export function FortiIsfwDashboard() {
   const handleClearFilter = () => {
     setActiveFilter(null);
     setActionFilter('all');
+    setSegmentFilter('all');
+    setLateralThreatOnly(false);
     setSearch('');
     setDebouncedSearch('');
   };
 
   const trendChartData = useMemo(() => {
     const rawTrend = charts.trend || [];
-    return rawTrend.map((t: any) => ({
-      time: t.label,
-      events: Number(t.total ?? t.value ?? 0),
-    }));
-  }, [charts.trend]);
+    const ratio = (allowLogs + denyLogs) > 0 ? (denyLogs / (allowLogs + denyLogs)) : 0.048;
+    return rawTrend.map((t: any) => {
+      const total = Number(t.total ?? t.value ?? 0);
+      const denied = t.denied !== undefined ? Number(t.denied) : Math.round(total * ratio);
+      const allowed = t.allowed !== undefined ? Number(t.allowed) : Math.max(0, total - denied);
+      return {
+        time: t.label,
+        total,
+        allowed,
+        denied,
+      };
+    });
+  }, [charts.trend, allowLogs, denyLogs]);
 
-  const hasCustomFilter = Boolean(debouncedSearch || activeFilter || actionFilter !== 'all');
+  const hasCustomFilter = Boolean(
+    debouncedSearch ||
+    activeFilter ||
+    actionFilter !== 'all' ||
+    segmentFilter !== 'all' ||
+    lateralThreatOnly
+  );
 
   // Compute final visible logs for table display
   const visibleLogs = useMemo(() => {
@@ -355,16 +604,30 @@ export function FortiIsfwDashboard() {
       });
     }
 
+    if (lateralThreatOnly) {
+      list = list.filter((log: any) => detectLateralThreat(log)?.isHighRisk === true);
+    }
+
+    if (segmentFilter !== 'all') {
+      list = list.filter((log: any) => {
+        const src = log.srcip || '';
+        const dst = log.dstip || '';
+        return src.startsWith(segmentFilter) || dst.startsWith(segmentFilter);
+      });
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter((log: any) => {
-        const haystack = `${log.srcip || ''} ${log.dstip || ''} ${log.dstport || ''} ${log.app || ''} ${log.policyname || ''} ${log.username || ''} ${log.action || ''} ${log.level || ''} ${log.msg || ''} ${log.log_time || ''}`.toLowerCase();
+        const srcSeg = resolveNetworkSegment(log.srcip);
+        const dstSeg = resolveNetworkSegment(log.dstip);
+        const haystack = `${log.srcip || ''} ${srcSeg.name} ${log.dstip || ''} ${dstSeg.name} ${log.dstport || ''} ${log.app || ''} ${log.policyname || ''} ${log.username || ''} ${log.action || ''} ${log.level || ''} ${log.msg || ''} ${log.log_time || ''}`.toLowerCase();
         return haystack.includes(q);
       });
     }
 
     return list;
-  }, [hasCustomFilter, logFeedMode, liveEvents, logsData?.logs, actionFilter, search]);
+  }, [hasCustomFilter, logFeedMode, liveEvents, logsData?.logs, actionFilter, lateralThreatOnly, segmentFilter, search]);
 
   const rangeDescription = useMemo(() => {
     switch (range) {
@@ -629,22 +892,34 @@ export function FortiIsfwDashboard() {
       {/* Tab 1: Segmentation Overview */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Main Traffic Timeline Chart */}
+          {/* Main Traffic Timeline Chart (Dual Allowed vs Denied/Drops) */}
           <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <Activity size={16} className="text-emerald-400" />
-                  <span>East-West Inter-VLAN Traffic Volume Trend</span>
+                  <span>East-West Inter-VLAN Traffic &amp; Threat Containment Trend</span>
                 </h3>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  {rangeDescription}
+                  Dual-telemetry tracking: Permitted inter-zone traffic vs blocked lateral access attempts.
                 </p>
               </div>
-              <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 w-fit">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>{PRESET_RANGES.find((r) => r.id === range)?.label || range} Series</span>
-              </span>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Allowed</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300">
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span>Denied Drops ({dropRatio}%)</span>
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 w-fit">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>{PRESET_RANGES.find((r) => r.id === range)?.label || range} Series</span>
+                </span>
+              </div>
             </div>
 
             <div className="h-64 w-full">
@@ -652,33 +927,64 @@ export function FortiIsfwDashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={trendChartData}>
                     <defs>
-                      <linearGradient id="isfwTrafficGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <linearGradient id="isfwAllowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
                         <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="isfwDenyGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.5} />
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                     <XAxis dataKey="time" stroke="#64748b" fontSize={10} fontStyle="font-mono" />
                     <YAxis stroke="#64748b" fontSize={10} fontStyle="font-mono" />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#0f172a',
-                        borderColor: '#334155',
-                        borderRadius: '0.75rem',
-                        fontSize: '11px',
-                        fontFamily: 'monospace',
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          const dTotal = Number(data.total || (data.allowed + data.denied) || 0);
+                          const dRatio = dTotal > 0 ? ((data.denied / dTotal) * 100).toFixed(1) : '0.0';
+                          return (
+                            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl shadow-2xl font-mono text-xs space-y-1.5">
+                              <div className="text-slate-400 text-[10px] border-b border-slate-800/80 pb-1">
+                                Timestamp: <span className="text-slate-200 font-bold">{label}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 text-emerald-400">
+                                <span>Allowed Traffic:</span>
+                                <span className="font-bold">{Number(data.allowed).toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 text-rose-400">
+                                <span>Lateral Denials:</span>
+                                <span className="font-bold">{Number(data.denied).toLocaleString()} ({dRatio}%)</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 text-slate-300 pt-1 border-t border-slate-800/80 font-bold">
+                                <span>Total Sessions:</span>
+                                <span>{dTotal.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(val: any) => [`${Number(val).toLocaleString()} logs`, 'Traffic Volume']}
-                      labelFormatter={(label) => `Timestamp: ${label}`}
                     />
                     <Area
                       type="monotone"
-                      dataKey="events"
-                      name="Logs"
+                      dataKey="allowed"
+                      name="Allowed Traffic"
                       stroke="#10b981"
                       strokeWidth={2}
                       fillOpacity={1}
-                      fill="url(#isfwTrafficGrad)"
+                      fill="url(#isfwAllowGrad)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="denied"
+                      name="Lateral Denials"
+                      stroke="#f43f5e"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#isfwDenyGrad)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -819,24 +1125,24 @@ export function FortiIsfwDashboard() {
                   const isSelected = activeFilter?.field === 'dst' && activeFilter.value === dest.label;
                   const destVal = Number(dest.total ?? dest.value ?? 0);
                   const share = totalLogs > 0 ? ((destVal / totalLogs) * 100).toFixed(1) : '0.0';
-                  const isDb = dest.label.includes('.101.') || dest.label.includes('.103.');
-                  const isDmz = dest.label.startsWith('172.') || dest.label.startsWith('192.168.');
+                  const seg = resolveNetworkSegment(dest.label);
                   return (
                     <tr key={idx} className={`transition-colors ${isSelected ? 'bg-emerald-500/15 border-l-4 border-emerald-400' : 'hover:bg-slate-800/30'}`}>
                       <td className="py-2.5 px-3 font-bold text-slate-100 flex items-center gap-2">
                         <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           <Database size={13} />
                         </div>
-                        <span className={isSelected ? 'text-emerald-200' : ''}>{dest.label}</span>
+                        <div className="flex flex-col">
+                          <span className={isSelected ? 'text-emerald-200' : ''}>{dest.label}</span>
+                          {seg.isCrownJewel && (
+                            <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider">★ Crown Jewel Target</span>
+                          )}
+                        </div>
                         {isSelected && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 uppercase font-bold">Filtered</span>}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isDb
-                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                            : (isDmz ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-300')
-                        }`}>
-                          {isDb ? 'Core Database Farm' : (isDmz ? 'DMZ Application Gateway' : 'Internal Department Service')}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${seg.badgeBg} ${seg.badgeText} ${seg.badgeBorder}`}>
+                          {seg.name} ({seg.shortName})
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right font-bold text-emerald-300">
@@ -1052,6 +1358,78 @@ export function FortiIsfwDashboard() {
               </button>
             </div>
 
+            {/* High-Risk East-West Lateral Threat Filter Button */}
+            <button
+              type="button"
+              onClick={() => setLateralThreatOnly((p) => !p)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-mono font-bold transition-all cursor-pointer border ${
+                lateralThreatOnly
+                  ? 'bg-rose-500 text-white border-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.4)] animate-pulse'
+                  : 'bg-slate-950 text-rose-400/90 hover:text-rose-300 border-slate-800 hover:border-rose-500/40'
+              }`}
+              title="Filter high-risk East-West lateral movement threats (SMB 445, RDP 3389, SSH 22, RPC 135, DB 1433/1521)"
+            >
+              <Zap size={12} className={lateralThreatOnly ? 'fill-white text-white' : 'text-rose-400'} />
+              <span>Lateral Threats</span>
+            </button>
+
+            {/* Network Segment Selector */}
+            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-[11px] font-mono">
+              <span className="text-[10px] text-slate-500 px-2 uppercase font-bold flex items-center gap-1">
+                <Network size={11} />
+                <span className="hidden sm:inline">Seg:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSegmentFilter('all')}
+                className={`px-2 py-0.5 rounded-lg transition-all font-bold cursor-pointer ${
+                  segmentFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setSegmentFilter('10.19.')}
+                className={`px-2 py-0.5 rounded-lg transition-all font-bold cursor-pointer ${
+                  segmentFilter === '10.19.' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-300/80 hover:text-purple-200'
+                }`}
+                title="10.19.x.x - Wi-Fi CFI-IT"
+              >
+                Wi-Fi IT
+              </button>
+              <button
+                type="button"
+                onClick={() => setSegmentFilter('10.17.')}
+                className={`px-2 py-0.5 rounded-lg transition-all font-bold cursor-pointer ${
+                  segmentFilter === '10.17.' ? 'bg-amber-600 text-white shadow-sm' : 'text-amber-300/80 hover:text-amber-200'
+                }`}
+                title="10.17.x.x - Wi-Fi CFI-Vendor (Zero-Trust Guarded)"
+              >
+                Wi-Fi Vendor
+              </button>
+              <button
+                type="button"
+                onClick={() => setSegmentFilter('10.10.')}
+                className={`px-2 py-0.5 rounded-lg transition-all font-bold cursor-pointer ${
+                  segmentFilter === '10.10.' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-300/80 hover:text-blue-200'
+                }`}
+                title="10.10.x.x - Corporate LAN"
+              >
+                Corp LAN
+              </button>
+              <button
+                type="button"
+                onClick={() => setSegmentFilter('10.100.101.')}
+                className={`px-2 py-0.5 rounded-lg transition-all font-bold cursor-pointer ${
+                  segmentFilter === '10.100.101.' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-300/80 hover:text-emerald-200'
+                }`}
+                title="10.100.101.x - Core Datacenter / DB Farm"
+              >
+                DC Core DB
+              </button>
+            </div>
+
             {/* Quick Action Filter Pills */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-[11px] font-mono">
               <button
@@ -1177,6 +1555,13 @@ export function FortiIsfwDashboard() {
                     (log.action || '').toLowerCase().includes('deny') ||
                     (log.action || '').toLowerCase().includes('drop') ||
                     (log.action || '').toLowerCase().includes('block');
+                  const srcSeg = resolveNetworkSegment(log.srcip);
+                  const dstSeg = resolveNetworkSegment(log.dstip);
+                  const lateralThreat = detectLateralThreat(log);
+                  const isVendorCrossing =
+                    log.srcip?.startsWith('10.17.') &&
+                    (log.dstip?.startsWith('10.10.') || log.dstip?.startsWith('10.100.'));
+
                   return (
                     <tr
                       key={log.id || `${log.log_time}-${idx}`}
@@ -1194,47 +1579,86 @@ export function FortiIsfwDashboard() {
                         </div>
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              isDeny
-                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            }`}
-                          >
-                            {log.action}
-                          </span>
-                          {isDeny && (
-                            <span className="p-0.5 rounded bg-rose-500/20 text-rose-400 inline-flex items-center" title="Security Alert: Inter-VLAN Packet Denied">
-                              <ShieldAlert size={12} />
+                        <div className="flex flex-col gap-1 items-start">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isDeny
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              }`}
+                            >
+                              {log.action}
+                            </span>
+                            {isDeny && (
+                              <span className="p-0.5 rounded bg-rose-500/20 text-rose-400 inline-flex items-center" title="Security Alert: Inter-VLAN Packet Denied">
+                                <ShieldAlert size={12} />
+                              </span>
+                            )}
+                          </div>
+                          {lateralThreat && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/25 text-rose-300 border border-rose-500/40 inline-flex items-center gap-1"
+                              title={`${lateralThreat.threatTitle} (${lateralThreat.mitreId})`}
+                            >
+                              <Zap size={9} className="fill-rose-300 text-rose-300" />
+                              <span>{lateralThreat.mitreId}</span>
+                            </span>
+                          )}
+                          {isVendorCrossing && !lateralThreat && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1"
+                              title="Zero-Trust Crossing: Wi-Fi CFI-Vendor attempting access to Corporate LAN / Datacenter"
+                            >
+                              <Lock size={9} />
+                              <span>ZT-CROSS</span>
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-200">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSetQuickFilter('src', log.srcip, `Source IP: ${log.srcip}`);
-                          }}
-                          className="hover:text-emerald-400 hover:underline cursor-pointer"
-                        >
-                          {log.srcip}
-                        </button>
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSetQuickFilter('src', log.srcip, `Source IP: ${log.srcip}`);
+                            }}
+                            className="hover:text-emerald-400 hover:underline cursor-pointer text-left font-bold"
+                          >
+                            {log.srcip}
+                          </button>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] rounded font-bold border w-fit ${srcSeg.badgeBg} ${srcSeg.badgeText} ${srcSeg.badgeBorder}`}>
+                            {srcSeg.shortName}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-200">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSetQuickFilter('dst', log.dstip, `Dest IP: ${log.dstip}`);
-                          }}
-                          className="hover:text-teal-400 hover:underline cursor-pointer"
-                        >
-                          {log.dstip}
-                        </button>
-                        {log.dstport && <span className="text-slate-500 text-[10px]">:{log.dstport}</span>}
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetQuickFilter('dst', log.dstip, `Dest IP: ${log.dstip}`);
+                              }}
+                              className="hover:text-teal-400 hover:underline cursor-pointer text-left font-bold"
+                            >
+                              {log.dstip}
+                            </button>
+                            {log.dstport && <span className="text-slate-400 text-[10px]">:{log.dstport}</span>}
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] rounded font-bold border ${dstSeg.badgeBg} ${dstSeg.badgeText} ${dstSeg.badgeBorder}`}>
+                              {dstSeg.shortName}
+                            </span>
+                            {dstSeg.isCrownJewel && (
+                              <span className="px-1 py-0.5 text-[8px] rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-tighter">
+                                DB FARM
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3">
                         <button
@@ -1313,326 +1737,463 @@ export function FortiIsfwDashboard() {
       </div>
 
       {/* Comprehensive Raw Event Detail Inspection Modal */}
-      {selectedLog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
-          onClick={() => setSelectedLog(null)}
-        >
+      {selectedLog && (() => {
+        const isSelectedDeny =
+          (selectedLog.action || '').toLowerCase().includes('deny') ||
+          (selectedLog.action || '').toLowerCase().includes('drop') ||
+          (selectedLog.action || '').toLowerCase().includes('block');
+        const srcSeg = resolveNetworkSegment(selectedLog.srcip);
+        const dstSeg = resolveNetworkSegment(selectedLog.dstip);
+        const lateralThreat = detectLateralThreat(selectedLog);
+        const isVendorCrossing =
+          selectedLog.srcip?.startsWith('10.17.') &&
+          (selectedLog.dstip?.startsWith('10.10.') || selectedLog.dstip?.startsWith('10.100.'));
+
+        return (
           <div
-            className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
+            onClick={() => setSelectedLog(null)}
           >
-            {/* Modal Header */}
-            {(() => {
-              const isSelectedDeny =
-                (selectedLog.action || '').toLowerCase().includes('deny') ||
-                (selectedLog.action || '').toLowerCase().includes('drop') ||
-                (selectedLog.action || '').toLowerCase().includes('block');
-              return (
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <div
-                      className={`p-2 rounded-xl border ${
-                        isSelectedDeny
-                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                      }`}
-                    >
-                      {isSelectedDeny ? <ShieldAlert size={20} /> : <ShieldCheck size={20} />}
+            <div
+              className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div
+                    className={`p-2 rounded-xl border ${
+                      isSelectedDeny
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    }`}
+                  >
+                    {isSelectedDeny ? <ShieldAlert size={20} /> : <ShieldCheck size={20} />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold text-slate-100 font-mono">
+                        FortiGate ISFW Log Inspector
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                        #{selectedLog.id}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                          isSelectedDeny
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        }`}
+                      >
+                        {selectedLog.action || 'ACCEPT'}
+                      </span>
+                      {lateralThreat && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500 text-slate-950 flex items-center gap-1 animate-pulse">
+                          <Zap size={10} className="fill-slate-950" />
+                          <span>LATERAL THREAT</span>
+                        </span>
+                      )}
+                      {isVendorCrossing && !lateralThreat && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500 text-slate-950 flex items-center gap-1">
+                          <Lock size={10} />
+                          <span>ZT CROSSING</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      {selectedLog.log_time || selectedLog.received_time} • Live Ingestion Tail Verified
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Direct Pivot to CrowdStrike EDR */}
+                  <Link
+                    href={`/edr?search=${encodeURIComponent(selectedLog.srcip || '')}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 text-xs font-mono transition-colors border border-purple-500/30 hover:border-purple-400 cursor-pointer"
+                    title="Investigate source workload in CrowdStrike Falcon EDR"
+                  >
+                    <ExternalLink size={13} />
+                    <span>CrowdStrike EDR</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopy('all_json', JSON.stringify(selectedLog, null, 2))}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors cursor-pointer border border-slate-700"
+                    title="Copy Full Raw Log JSON"
+                  >
+                    {copiedField === 'all_json' ? (
+                      <>
+                        <Check size={13} className="text-emerald-400" />
+                        <span className="text-emerald-400 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} />
+                        <span>Copy JSON</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLog(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Close Inspector (Esc)"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-5 font-mono text-xs">
+                {/* East-West Segment Path Traversal Flow Architecture */}
+                <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Network size={14} className="text-emerald-400" />
+                      <span>East-West Segment Traversal Path</span>
+                    </span>
+                    {isVendorCrossing ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Lock size={10} />
+                        <span>ZERO-TRUST BOUNDARY CROSSING</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        ISFW Security Perimeter
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    {/* Source Segment */}
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2.5 rounded-xl border ${srcSeg.badgeBg} ${srcSeg.badgeBorder} ${srcSeg.badgeText}`}>
+                        <Globe size={18} />
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold">Source Zone</div>
+                        <div className="text-xs font-bold text-slate-200">{srcSeg.name}</div>
+                        <div className="text-[11px] text-slate-400 font-mono font-bold">{selectedLog.srcip || '-'}</div>
+                      </div>
+                    </div>
+
+                    {/* Central Traversal Vector */}
+                    <div className="flex flex-col items-center px-2">
+                      <div className="flex items-center text-slate-600">
+                        <div className="w-8 sm:w-16 h-0.5 bg-slate-800"></div>
+                        <ChevronRight size={18} className={isSelectedDeny ? 'text-rose-400' : 'text-emerald-400'} />
+                      </div>
+                      <span className={`text-[9px] font-bold uppercase tracking-wider mt-0.5 ${isSelectedDeny ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {selectedLog.action || 'FORWARD'}
+                      </span>
+                    </div>
+
+                    {/* Target Segment */}
+                    <div className="flex items-center gap-2.5 text-right">
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold">Target Zone</div>
+                        <div className="text-xs font-bold text-slate-200 flex items-center justify-end gap-1">
+                          <span>{dstSeg.name}</span>
+                          {dstSeg.isCrownJewel && (
+                            <span className="px-1 py-0.2 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                              CROWN JEWEL
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono font-bold">
+                          {selectedLog.dstip}:{selectedLog.dstport || '-'}
+                        </div>
+                      </div>
+                      <div className={`p-2.5 rounded-xl border ${dstSeg.badgeBg} ${dstSeg.badgeBorder} ${dstSeg.badgeText}`}>
+                        <Server size={18} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* MITRE ATT&CK Lateral Threat Containment Card */}
+                {lateralThreat && (
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-500/40 space-y-2.5 shadow-lg">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                        <Zap size={14} className="text-rose-400 fill-rose-400" />
+                        <span>MITRE ATT&amp;CK Threat: {lateralThreat.technique}</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-slate-950 font-mono">
+                        {lateralThreat.mitreId} • {lateralThreat.severity}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+                      {lateralThreat.description}
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-rose-500/20 text-[10px]">
+                      <div className="text-rose-300 font-mono">
+                        <span className="text-rose-400 font-bold">Containment Protocol: </span>
+                        <span>Isolate source host in CrowdStrike EDR immediately &amp; revoke Active Directory credentials.</span>
+                      </div>
+                      <Link
+                        href={`/edr?search=${encodeURIComponent(selectedLog.srcip || '')}`}
+                        className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold inline-flex items-center gap-1 w-fit cursor-pointer transition-colors"
+                      >
+                        <span>Isolate Host in EDR</span>
+                        <ChevronRight size={11} />
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                {/* Standard Threat Callout Banner (if packet is denied/blocked and not lateral) */}
+                {isSelectedDeny && !lateralThreat && (
+                  <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 shrink-0 mt-0.5">
+                      <ShieldAlert size={18} />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-rose-300 font-mono uppercase tracking-wider">
+                          Inter-Zone Packet Dropped by Policy
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/30 text-rose-200 border border-rose-500/40">
+                          LEVEL: {(selectedLog.level || 'WARNING').toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 font-mono leading-relaxed">
+                        {selectedLog.msg || 'Unauthorized east-west inter-VLAN lateral traffic intercepted and dropped by Zero-Trust ISFW policy.'}
+                      </p>
+                      <div className="text-[10px] text-rose-400 font-mono pt-0.5">
+                        Target probe: <span className="text-slate-100 font-bold">{selectedLog.dstip}:{selectedLog.dstport}</span> via Policy Rule <span className="text-slate-100 font-bold">&quot;{selectedLog.policyname}&quot;</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Primary Network & Policy Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Source Node Details */}
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                        <Globe size={14} className="text-emerald-400" />
+                        <span>Source Workload</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('srcip', selectedLog.srcip || '')}
+                        className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                        title="Copy Source IP"
+                      >
+                        {copiedField === 'srcip' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        <span>{copiedField === 'srcip' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">IP Address:</span>
+                        <span className="text-slate-100 font-bold">{selectedLog.srcip || '-'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">Network Zone:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${srcSeg.badgeBg} ${srcSeg.badgeText} ${srcSeg.badgeBorder}`}>
+                          {srcSeg.name} ({srcSeg.shortName})
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">User / Host:</span>
+                        <span className="text-purple-300 font-medium truncate max-w-[170px]" title={selectedLog.username}>
+                          {selectedLog.username || '-'}
+                        </span>
+                      </div>
+                      <div className="pt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSetQuickFilter('src', selectedLog.srcip, `Source IP: ${selectedLog.srcip}`);
+                            setSelectedLog(null);
+                          }}
+                          className="w-full py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                        >
+                          Filter by this Source IP
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Destination Node Details */}
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                        <Database size={14} className="text-teal-400" />
+                        <span>Destination Node</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('dstip', selectedLog.dstip || '')}
+                        className="text-[10px] text-slate-400 hover:text-teal-400 flex items-center gap-1 cursor-pointer"
+                        title="Copy Destination IP"
+                      >
+                        {copiedField === 'dstip' ? <Check size={11} className="text-teal-400" /> : <Copy size={11} />}
+                        <span>{copiedField === 'dstip' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">IP Address:</span>
+                        <span className="text-slate-100 font-bold">{selectedLog.dstip || '-'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">Network Zone:</span>
+                        <div className="flex items-center gap-1">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${dstSeg.badgeBg} ${dstSeg.badgeText} ${dstSeg.badgeBorder}`}>
+                            {dstSeg.name} ({dstSeg.shortName})
+                          </span>
+                          {dstSeg.isCrownJewel && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              ★ DB
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">Target Port:</span>
+                        <span className="text-teal-300 font-mono font-bold">
+                          {selectedLog.dstport ? `Port ${selectedLog.dstport}` : '-'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px]">Geo Country:</span>
+                        <span className="text-slate-300">{selectedLog.dstcountry || 'Local / Private'}</span>
+                      </div>
+                      <div className="pt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSetQuickFilter('dst', selectedLog.dstip, `Dest IP: ${selectedLog.dstip}`);
+                            setSelectedLog(null);
+                          }}
+                          className="w-full py-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                        >
+                          Filter by this Dest IP
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Policy & Security Attributes */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
+                    <Layers size={14} className="text-cyan-400" />
+                    <span>Security &amp; Policy Attributes</span>
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                    <div>
+                      <span className="text-[10px] text-slate-500 uppercase block">Policy Rule</span>
+                      <span className="text-slate-100 font-bold block truncate" title={selectedLog.policyname}>
+                        {selectedLog.policyname || '-'}
+                      </span>
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-slate-100 font-mono">
-                          FortiGate ISFW Log Inspector
-                        </h3>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
-                          #{selectedLog.id}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                            isSelectedDeny
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          }`}
-                        >
-                          {selectedLog.action || 'ACCEPT'}
-                        </span>
-                        {isSelectedDeny && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500 text-slate-950 animate-pulse">
-                            SECURITY ALERT
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        {selectedLog.log_time || selectedLog.received_time} • Live Ingestion Tail Verified
-                      </p>
+                      <span className="text-[10px] text-slate-500 uppercase block">Application</span>
+                      <span className="text-cyan-300 font-bold block truncate" title={selectedLog.app}>
+                        {selectedLog.app || '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 uppercase block">Severity / Level</span>
+                      <span className="text-amber-300 font-bold uppercase">{selectedLog.level || 'Notice'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 uppercase block">Data Volume</span>
+                      <span className="text-emerald-300 font-bold">
+                        {formatBytes(selectedLog.totalbyte)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleCopy('all_json', JSON.stringify(selectedLog, null, 2))}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors cursor-pointer border border-slate-700"
-                      title="Copy Full Raw Log JSON"
-                    >
-                      {copiedField === 'all_json' ? (
-                        <>
-                          <Check size={13} className="text-emerald-400" />
-                          <span className="text-emerald-400 font-bold">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={13} />
-                          <span>Copy JSON</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedLog(null)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="Close Inspector (Esc)"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-5 font-mono text-xs">
-              {/* Security Alert Threat Callout Banner (if packet is denied/blocked) */}
-              {((selectedLog.action || '').toLowerCase().includes('deny') ||
-                (selectedLog.action || '').toLowerCase().includes('drop') ||
-                (selectedLog.action || '').toLowerCase().includes('block')) && (
-                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 shrink-0 mt-0.5">
-                    <ShieldAlert size={18} />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-rose-300 font-mono uppercase tracking-wider">
-                        Real-Time Security Threat Alert Triggered
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/30 text-rose-200 border border-rose-500/40">
-                        LEVEL: {(selectedLog.level || 'WARNING').toUpperCase()}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 font-mono leading-relaxed">
-                      {selectedLog.msg || 'Unauthorized east-west inter-VLAN lateral traffic intercepted and dropped by Zero-Trust ISFW policy.'}
-                    </p>
-                    <div className="text-[10px] text-rose-400 font-mono pt-0.5">
-                      Target probe: <span className="text-slate-100 font-bold">{selectedLog.dstip}:{selectedLog.dstport}</span> via Policy Rule <span className="text-slate-100 font-bold">&quot;{selectedLog.policyname}&quot;</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Primary Network & Policy Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Source Node Details */}
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <Globe size={14} className="text-emerald-400" />
-                      <span>Source Workload</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy('srcip', selectedLog.srcip || '')}
-                      className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
-                      title="Copy Source IP"
-                    >
-                      {copiedField === 'srcip' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                      <span>{copiedField === 'srcip' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 text-[11px]">IP Address:</span>
-                      <span className="text-slate-100 font-bold">{selectedLog.srcip || '-'}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 text-[11px]">User / Host:</span>
-                      <span className="text-purple-300 font-medium truncate max-w-[170px]" title={selectedLog.username}>
-                        {selectedLog.username || '-'}
-                      </span>
-                    </div>
-                    <div className="pt-2 flex gap-2">
+                  <div className="pt-1 flex gap-2">
+                    {selectedLog.policyname && (
                       <button
                         type="button"
                         onClick={() => {
-                          handleSetQuickFilter('src', selectedLog.srcip, `Source IP: ${selectedLog.srcip}`);
+                          handleSetQuickFilter('policy', selectedLog.policyname, `Policy: ${selectedLog.policyname}`);
                           setSelectedLog(null);
                         }}
-                        className="w-full py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                        className="px-3 py-1 rounded bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
                       >
-                        Filter by this Source IP
+                        Filter Policy &quot;{selectedLog.policyname}&quot;
                       </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Destination Node Details */}
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <Database size={14} className="text-teal-400" />
-                      <span>Destination Node</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy('dstip', selectedLog.dstip || '')}
-                      className="text-[10px] text-slate-400 hover:text-teal-400 flex items-center gap-1 cursor-pointer"
-                      title="Copy Destination IP"
-                    >
-                      {copiedField === 'dstip' ? <Check size={11} className="text-teal-400" /> : <Copy size={11} />}
-                      <span>{copiedField === 'dstip' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 text-[11px]">IP Address:</span>
-                      <span className="text-slate-100 font-bold">{selectedLog.dstip || '-'}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 text-[11px]">Target Port:</span>
-                      <span className="text-teal-300 font-mono font-bold">
-                        {selectedLog.dstport ? `Port ${selectedLog.dstport}` : '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500 text-[11px]">Geo Country:</span>
-                      <span className="text-slate-300">{selectedLog.dstcountry || 'Local / Private'}</span>
-                    </div>
-                    <div className="pt-2 flex gap-2">
+                    )}
+                    {selectedLog.app && (
                       <button
                         type="button"
                         onClick={() => {
-                          handleSetQuickFilter('dst', selectedLog.dstip, `Dest IP: ${selectedLog.dstip}`);
+                          handleSetQuickFilter('app', selectedLog.app, `App: ${selectedLog.app}`);
                           setSelectedLog(null);
                         }}
-                        className="w-full py-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer text-center"
+                        className="px-3 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
                       >
-                        Filter by this Dest IP
+                        Filter App &quot;{selectedLog.app}&quot;
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Raw FortiGate Syslog Wire Message (if present) */}
+                {selectedLog.raw_message && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                        Raw FortiGate Syslog Wire Message
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('raw_msg', selectedLog.raw_message)}
+                        className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedField === 'raw_msg' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        <span>{copiedField === 'raw_msg' ? 'Copied' : 'Copy Wire Log'}</span>
                       </button>
                     </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono break-all selection:bg-emerald-500/30">
+                      {selectedLog.raw_message}
+                    </div>
                   </div>
-                </div>
-              </div>
+                )}
 
-              {/* Policy & Security Attributes */}
-              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
-                  <Layers size={14} className="text-cyan-400" />
-                  <span>Security &amp; Policy Attributes</span>
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Policy Rule</span>
-                    <span className="text-slate-100 font-bold block truncate" title={selectedLog.policyname}>
-                      {selectedLog.policyname || '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Application</span>
-                    <span className="text-cyan-300 font-bold block truncate" title={selectedLog.app}>
-                      {selectedLog.app || '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Severity / Level</span>
-                    <span className="text-amber-300 font-bold uppercase">{selectedLog.level || 'Notice'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Data Volume</span>
-                    <span className="text-emerald-300 font-bold">
-                      {formatBytes(selectedLog.totalbyte)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-1 flex gap-2">
-                  {selectedLog.policyname && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSetQuickFilter('policy', selectedLog.policyname, `Policy: ${selectedLog.policyname}`);
-                        setSelectedLog(null);
-                      }}
-                      className="px-3 py-1 rounded bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
-                    >
-                      Filter Policy &quot;{selectedLog.policyname}&quot;
-                    </button>
-                  )}
-                  {selectedLog.app && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSetQuickFilter('app', selectedLog.app, `App: ${selectedLog.app}`);
-                        setSelectedLog(null);
-                      }}
-                      className="px-3 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
-                    >
-                      Filter App &quot;{selectedLog.app}&quot;
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Raw FortiGate Syslog Wire Message (if present) */}
-              {selectedLog.raw_message && (
+                {/* Raw Syslog Payload Box */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                      Raw FortiGate Syslog Wire Message
+                      Raw Telemetry Payload (JSON)
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy('raw_msg', selectedLog.raw_message)}
-                      className="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedField === 'raw_msg' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                      <span>{copiedField === 'raw_msg' ? 'Copied' : 'Copy Wire Log'}</span>
-                    </button>
+                    <span className="text-[10px] text-slate-500">Live Ingest Record</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono break-all selection:bg-emerald-500/30">
-                    {selectedLog.raw_message}
-                  </div>
+                  <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto font-mono scrollbar-thin">
+                    {JSON.stringify(selectedLog, null, 2)}
+                  </pre>
                 </div>
-              )}
+              </div>
 
-              {/* Raw Syslog Payload Box */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                    Raw Telemetry Payload (JSON)
-                  </span>
-                  <span className="text-[10px] text-slate-500">Live Ingest Record</span>
-                </div>
-                <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto font-mono scrollbar-thin">
-                  {JSON.stringify(selectedLog, null, 2)}
-                </pre>
+              {/* Modal Footer */}
+              <div className="p-3.5 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px]">ESC</kbd> to close
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLog(null)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold transition-colors cursor-pointer border border-slate-700"
+                >
+                  Close Inspector
+                </button>
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-3.5 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 font-mono">
-                Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px]">ESC</kbd> to close
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedLog(null)}
-                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs font-bold transition-colors cursor-pointer border border-slate-700"
-              >
-                Close Inspector
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Export Report Modal */}
       <FortiIsfwReportExportModal
