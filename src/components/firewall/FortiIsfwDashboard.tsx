@@ -31,6 +31,8 @@ import {
   Copy,
   Check,
   Eye,
+  Play,
+  Pause,
   X
 } from 'lucide-react';
 import {
@@ -77,6 +79,10 @@ export function FortiIsfwDashboard() {
   const [search, setSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [logFeedMode, setLogFeedMode] = useState<'live' | 'snapshot'>('live');
+  const [actionFilter, setActionFilter] = useState<'all' | 'deny' | 'accept'>('all');
+  const [livePaused, setLivePaused] = useState(false);
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'paused' | 'error'>('connecting');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -128,12 +134,13 @@ export function FortiIsfwDashboard() {
       });
       return res.data;
     },
-    refetchInterval: logFeedMode === 'live' ? 15000 : false,
+    refetchInterval: logFeedMode === 'live' && !livePaused ? 15000 : false,
+    refetchIntervalInBackground: true,
     staleTime: 5000,
     placeholderData: (previousData) => previousData,
   });
 
-  // 2. Fetch Real-time Syslog Stream
+  // 2. Fetch Filtered / Historical Syslog Stream
   const {
     data: logsData,
     isLoading: isLogsLoading,
@@ -142,7 +149,7 @@ export function FortiIsfwDashboard() {
     refetch: refetchLogs,
     isFetching: isLogsFetching,
   } = useQuery({
-    queryKey: ['forti-isfw-logs', range, activeFilter?.field, activeFilter?.value, debouncedSearch],
+    queryKey: ['forti-isfw-logs', range, activeFilter?.field, activeFilter?.value, debouncedSearch, actionFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('type', 'logs');
@@ -162,16 +169,58 @@ export function FortiIsfwDashboard() {
       });
       return res.data;
     },
-    refetchInterval: logFeedMode === 'live' ? 5000 : false,
-    staleTime: 2000,
+    refetchInterval: logFeedMode === 'live' && !livePaused ? 8000 : false,
+    refetchIntervalInBackground: true,
+    staleTime: 3000,
     placeholderData: (previousData) => previousData,
   });
+
+  // 3. Lightweight Real-time Live Packet Stream (Fetches latest 15 packets every 3.5s)
+  const liveStreamQuery = useQuery({
+    queryKey: ['forti-isfw-live-stream'],
+    queryFn: async () => {
+      const res = await api.get('/forti/syslog?type=logs&limit=15', {
+        timeout: 15_000,
+      });
+      return res.data;
+    },
+    refetchInterval: livePaused || logFeedMode !== 'live' ? false : 3500,
+    refetchIntervalInBackground: true,
+  });
+
+  // Merge arriving live packets into live buffer
+  useEffect(() => {
+    const streamLogs = liveStreamQuery.data?.logs || [];
+    if (streamLogs.length > 0) {
+      setLiveEvents((prev) => {
+        if (prev.length === 0) {
+          return streamLogs.slice(0, 50);
+        }
+        const newLogs = streamLogs.filter(
+          (l: any) =>
+            !prev.some(
+              (p) =>
+                (p.id && p.id === l.id) ||
+                (p.log_time === l.log_time &&
+                  p.srcip === l.srcip &&
+                  p.dstip === l.dstip &&
+                  p.dstport === l.dstport)
+            )
+        );
+        if (newLogs.length === 0) {
+          return prev;
+        }
+        return [...newLogs, ...prev].slice(0, 50);
+      });
+      setStreamStatus('connected');
+    }
+  }, [liveStreamQuery.data]);
 
   const kpi = summaryData?.kpi || {};
   const charts = summaryData?.charts || {};
   const top = summaryData?.top || {};
   const logs = logsData?.logs || [];
-  const rawLatest = summaryData?.raw_latest || logsData?.raw_latest || {};
+  const rawLatest = summaryData?.raw_latest || logsData?.raw_latest || liveStreamQuery.data?.raw_latest || {};
 
   const totalLogs = Number(kpi.total || 0);
   const allowLogs = Number(kpi.allow || 0);
@@ -188,6 +237,7 @@ export function FortiIsfwDashboard() {
 
   const handleClearFilter = () => {
     setActiveFilter(null);
+    setActionFilter('all');
     setSearch('');
     setDebouncedSearch('');
   };
@@ -200,36 +250,37 @@ export function FortiIsfwDashboard() {
     }));
   }, [charts.trend]);
 
-  // Client-side instant filtering on current logs batch
-  const filteredLogs = useMemo(() => {
-    if (!search.trim()) return logs;
-    const q = search.toLowerCase().trim();
-    return logs.filter((log: any) => {
-      const srcip = (log.srcip || '').toLowerCase();
-      const dstip = (log.dstip || '').toLowerCase();
-      const dstport = String(log.dstport || '');
-      const app = (log.app || '').toLowerCase();
-      const policyname = (log.policyname || '').toLowerCase();
-      const username = (log.username || '').toLowerCase();
-      const action = (log.action || '').toLowerCase();
-      const level = (log.level || '').toLowerCase();
-      const msg = (log.msg || '').toLowerCase();
-      const time = (log.log_time || log.received_time || '').toLowerCase();
+  const hasCustomFilter = Boolean(debouncedSearch || activeFilter || actionFilter !== 'all');
 
-      return (
-        srcip.includes(q) ||
-        dstip.includes(q) ||
-        dstport.includes(q) ||
-        app.includes(q) ||
-        policyname.includes(q) ||
-        username.includes(q) ||
-        action.includes(q) ||
-        level.includes(q) ||
-        msg.includes(q) ||
-        time.includes(q)
-      );
-    });
-  }, [logs, search]);
+  // Compute final visible logs for table display
+  const visibleLogs = useMemo(() => {
+    let list: any[] = [];
+    if (hasCustomFilter) {
+      list = logsData?.logs || [];
+    } else if (logFeedMode === 'live') {
+      list = liveEvents.length > 0 ? liveEvents : (logsData?.logs || []);
+    } else {
+      list = logsData?.logs || [];
+    }
+
+    if (actionFilter !== 'all') {
+      list = list.filter((log: any) => {
+        const act = (log.action || '').toLowerCase();
+        const isDeny = act.includes('deny') || act.includes('drop') || act.includes('block');
+        return actionFilter === 'deny' ? isDeny : !isDeny;
+      });
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter((log: any) => {
+        const haystack = `${log.srcip || ''} ${log.dstip || ''} ${log.dstport || ''} ${log.app || ''} ${log.policyname || ''} ${log.username || ''} ${log.action || ''} ${log.level || ''} ${log.msg || ''} ${log.log_time || ''}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    return list;
+  }, [hasCustomFilter, logFeedMode, liveEvents, logsData?.logs, actionFilter, search]);
 
   const rangeDescription = useMemo(() => {
     switch (range) {
@@ -838,14 +889,42 @@ export function FortiIsfwDashboard() {
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                 <span>Internal Segmentation Live Syslog Stream</span>
                 <span className="text-xs font-mono text-emerald-400 font-normal">
-                  ({filteredLogs.length} of {logs.length} Events)
+                  ({visibleLogs.length} Events Buffer)
                 </span>
               </h3>
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              {isLogsFetching && (
+
+              {/* Live Play / Pause Button */}
+              {logFeedMode === 'live' && (
+                <button
+                  type="button"
+                  onClick={() => setLivePaused((p) => !p)}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                    livePaused
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                  }`}
+                  title={livePaused ? 'Resume live packet stream' : 'Pause live packet stream'}
+                >
+                  {livePaused ? <Play size={10} className="fill-amber-300" /> : <Pause size={10} className="fill-emerald-300" />}
+                  <span>{livePaused ? 'STREAM PAUSED' : 'LIVE 3.5s'}</span>
+                </button>
+              )}
+
+              {/* Ingestion Lag Indicator */}
+              <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 hidden sm:inline-flex items-center gap-1">
+                <span>Lag:</span>
+                <span className="text-emerald-400 font-bold">
+                  {rawLatest?.ingest_lag_seconds !== null && rawLatest?.ingest_lag_seconds !== undefined
+                    ? `${rawLatest.ingest_lag_seconds}s`
+                    : 'Sub-second'}
+                </span>
+              </span>
+
+              {(isLogsFetching || liveStreamQuery.isFetching) && (
                 <RefreshCw size={12} className="animate-spin text-emerald-400 ml-1" />
               )}
             </div>
@@ -855,7 +934,7 @@ export function FortiIsfwDashboard() {
           </div>
 
           {/* Stream Toolbar */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Mode Switcher: Live Stream vs Snapshot */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-[11px] font-mono">
               <button
@@ -865,21 +944,56 @@ export function FortiIsfwDashboard() {
                   handleClearFilter();
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  logFeedMode === 'live' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                  logFeedMode === 'live' && !hasCustomFilter
+                    ? 'bg-emerald-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Radio size={12} className={logFeedMode === 'live' ? 'animate-pulse text-white' : ''} />
+                <Radio size={12} className={logFeedMode === 'live' && !hasCustomFilter ? 'animate-pulse text-white' : ''} />
                 <span>Live Feed</span>
               </button>
               <button
                 type="button"
                 onClick={() => setLogFeedMode('snapshot')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  logFeedMode === 'snapshot' ? 'bg-slate-800 text-slate-100 font-bold' : 'text-slate-400 hover:text-slate-200'
+                  logFeedMode === 'snapshot' && !hasCustomFilter
+                    ? 'bg-slate-800 text-slate-100 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Clock size={12} />
-                <span>Snapshot</span>
+                <span>Snapshot ({range.toUpperCase()})</span>
+              </button>
+            </div>
+
+            {/* Quick Action Filter Pills */}
+            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-[11px] font-mono">
+              <button
+                type="button"
+                onClick={() => setActionFilter('all')}
+                className={`px-2.5 py-1 rounded-lg transition-all font-bold cursor-pointer ${
+                  actionFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionFilter('deny')}
+                className={`px-2.5 py-1 rounded-lg transition-all font-bold cursor-pointer ${
+                  actionFilter === 'deny' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Denied
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionFilter('accept')}
+                className={`px-2.5 py-1 rounded-lg transition-all font-bold cursor-pointer ${
+                  actionFilter === 'accept' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Allowed
               </button>
             </div>
 
@@ -891,7 +1005,7 @@ export function FortiIsfwDashboard() {
                 placeholder="Search IP, User, Policy, App, Action..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 w-52 sm:w-72 transition-all"
+                className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 w-44 sm:w-60 transition-all"
               />
               {search && (
                 <button
@@ -907,6 +1021,19 @@ export function FortiIsfwDashboard() {
                 </button>
               )}
             </div>
+
+            {/* Reset Filter Button */}
+            {hasCustomFilter && (
+              <button
+                type="button"
+                onClick={handleClearFilter}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1 cursor-pointer transition-all border border-slate-700"
+                title="Reset active drilldown filters"
+              >
+                <X size={12} />
+                <span>Reset</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -926,7 +1053,7 @@ export function FortiIsfwDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 text-slate-300">
-              {isLogsLoading && logs.length === 0 ? (
+              {isLogsLoading && visibleLogs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-500 font-mono">
                     <div className="flex flex-col items-center gap-2">
@@ -935,7 +1062,7 @@ export function FortiIsfwDashboard() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
+              ) : visibleLogs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-500 font-mono">
                     {search ? (
@@ -958,19 +1085,26 @@ export function FortiIsfwDashboard() {
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((log: any, idx: number) => {
+                visibleLogs.map((log: any, idx: number) => {
                   const isDeny =
                     (log.action || '').toLowerCase().includes('deny') ||
                     (log.action || '').toLowerCase().includes('drop') ||
                     (log.action || '').toLowerCase().includes('block');
                   return (
                     <tr
-                      key={log.id || idx}
+                      key={log.id || `${log.log_time}-${idx}`}
                       onClick={() => setSelectedLog(log)}
-                      className="hover:bg-slate-800/40 cursor-pointer transition-colors group"
+                      className={`hover:bg-slate-800/40 cursor-pointer transition-colors group ${
+                        logFeedMode === 'live' && !livePaused && idx === 0 ? 'bg-emerald-500/5' : ''
+                      }`}
                     >
                       <td className="py-2.5 px-3 text-slate-400 text-[11px] whitespace-nowrap">
-                        {log.log_time || log.received_time}
+                        <div className="flex items-center gap-1.5">
+                          {logFeedMode === 'live' && !livePaused && idx === 0 && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" title="New live arrival" />
+                          )}
+                          <span>{log.log_time || log.received_time}</span>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3">
                         <span
