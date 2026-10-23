@@ -104,6 +104,12 @@ export function FortiIsfwReportExportModal({
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    if (isOpen && activeRange) {
+      setSelectedRange(activeRange);
+    }
+  }, [isOpen, activeRange]);
+
   if (!isOpen) return null;
 
   // Handle CSV Download directly from Forti ISFW API
