@@ -14,7 +14,9 @@ import {
   ChevronDown, 
   ChevronUp, 
   Zap,
-  Sparkles
+  Sparkles,
+  Shield,
+  Lock
 } from 'lucide-react';
 import { useIncidentStore } from '@/store/incidentStore';
 import Link from 'next/link';
@@ -41,8 +43,19 @@ export default function GlobalIncidentBanner({ onIncidentReceived }: GlobalIncid
   const [showHistory, setShowHistory] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-
+  const [isDrillOpen, setIsDrillOpen] = useState(false);
+  const drillRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (drillRef.current && !drillRef.current.contains(e.target as Node)) {
+        setIsDrillOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const playChime = () => {
     if (!soundEnabled || typeof window === 'undefined') return;
@@ -109,17 +122,31 @@ export default function GlobalIncidentBanner({ onIncidentReceived }: GlobalIncid
 
   const handleSimulateIncident = async (type: string = 'crowdstrike') => {
     setIsSimulating(true);
+    setIsDrillOpen(false);
     try {
+      let title = 'Critical EDR Threat: Mimikatz LSASS Dump Attempt';
+      let description = 'CrowdStrike Falcon detected credential dumping via LSASS process injection on host WS-FIN-044.';
+      let source = 'CrowdStrike Falcon EDR';
+      let severity = 'critical';
+
+      if (type === 'firewall_drop') {
+        title = 'Perimeter Drop Burst: 84,200 Syn-Flood Packets/Min Blocked';
+        description = 'FortiGate FGDC + Palo Alto blocked anomalous volumetric traffic targeting Core API.';
+        source = 'FortiGate FGDC + Palo Alto';
+        severity = 'high';
+      } else if (type === 'cyberark') {
+        title = 'PAM Privilege Breach: Unauthorized Root Vault Escalation';
+        description = 'CyberArk PAM flagged unapproved dual-control session override on DB-PROD-CLUSTER.';
+        source = 'CyberArk PAM Guard';
+        severity = 'critical';
+      }
+
       const res = await api.post('/dashboard/trigger-test-incident', {
         type,
-        severity: type === 'firewall_drop' ? 'high' : 'critical',
-        title: type === 'firewall_drop'
-          ? 'Perimeter Drop Burst: 84,200 Syn-Flood Packets/Min Blocked'
-          : 'Critical EDR Threat: Mimikatz LSASS Dump Attempt',
-        description: type === 'firewall_drop'
-          ? 'FortiGate FGDC + Palo Alto blocked anomalous volumetric traffic targeting Core API.'
-          : 'CrowdStrike Falcon detected credential dumping via LSASS process injection on host WS-FIN-044.',
-        source: type === 'firewall_drop' ? 'FortiGate FGDC + Palo Alto' : 'CrowdStrike Falcon EDR',
+        severity,
+        title,
+        description,
+        source,
       });
 
       if (res.data?.incident) {
@@ -154,7 +181,7 @@ export default function GlobalIncidentBanner({ onIncidentReceived }: GlobalIncid
       case 'db':
         return '/db';
       default:
-        return '/firewall/palo';
+        return '/firewall/palo-alto';
     }
   };
 
@@ -292,28 +319,67 @@ export default function GlobalIncidentBanner({ onIncidentReceived }: GlobalIncid
             </button>
           )}
 
-          <div className="flex items-center gap-1.5">
+          <div className="relative" ref={drillRef}>
             <button
               type="button"
               disabled={isSimulating}
-              onClick={() => handleSimulateIncident('crowdstrike')}
-              className="inline-flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 text-[11px] text-cyan-300 transition disabled:opacity-50"
-              title="Broadcast simulated CrowdStrike EDR incident via WebSocket"
+              onClick={() => setIsDrillOpen(!isDrillOpen)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-cyan-300 transition shadow-sm"
+              title="Simulate live SOC defense drill scenarios"
             >
-              <Zap className="h-3 w-3 text-cyan-400" />
-              <span>{isSimulating ? 'Sending...' : 'Test EDR Push'}</span>
+              <Zap className={`h-3 w-3 ${isSimulating ? 'animate-spin text-cyan-400' : 'text-amber-400'}`} />
+              <span>{isSimulating ? 'Simulating Drill...' : 'SOC Drill'}</span>
+              <ChevronDown className={`h-3 w-3 transition-transform ${isDrillOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            <button
-              type="button"
-              disabled={isSimulating}
-              onClick={() => handleSimulateIncident('firewall_drop')}
-              className="inline-flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 text-[11px] text-amber-300 transition disabled:opacity-50"
-              title="Broadcast simulated Firewall Volumetric Drop incident via WebSocket"
-            >
-              <Radio className="h-3 w-3 text-amber-400" />
-              <span>Test Drop Push</span>
-            </button>
+            {isDrillOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-64 rounded-xl border border-slate-700 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-md z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 mb-1">
+                  Trigger Defense Drill (WebSocket)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSimulateIncident('crowdstrike')}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800/80 text-left transition group cursor-pointer"
+                >
+                  <span className="p-1 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 mt-0.5">
+                    <ShieldAlert className="h-3 w-3" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-200 group-hover:text-rose-300">CrowdStrike EDR Alert</p>
+                    <p className="text-[10px] text-slate-400">Mimikatz LSASS credential dump</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSimulateIncident('firewall_drop')}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800/80 text-left transition group cursor-pointer"
+                >
+                  <span className="p-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 mt-0.5">
+                    <Radio className="h-3 w-3" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-200 group-hover:text-amber-300">Firewall Drop Burst</p>
+                    <p className="text-[10px] text-slate-400">Volumetric SYN-Flood perimeter block</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSimulateIncident('cyberark')}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-800/80 text-left transition group cursor-pointer"
+                >
+                  <span className="p-1 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 mt-0.5">
+                    <Lock className="h-3 w-3" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-200 group-hover:text-purple-300">CyberArk PAM Breach</p>
+                    <p className="text-[10px] text-slate-400">Privileged root vault escalation</p>
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

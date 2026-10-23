@@ -36,6 +36,7 @@ import {
 } from 'recharts';
 import GlobalIncidentBanner from '@/components/dashboard/GlobalIncidentBanner';
 import OverviewReportModal from '@/components/dashboard/OverviewReportModal';
+import Link from 'next/link';
 
 interface TrafficPoint {
   time: string;
@@ -89,7 +90,7 @@ interface OverviewData {
   server_time: string;
 }
 
-type TimeRangeKey = '1h' | '24h' | '7d' | '30d';
+type TimeRangeKey = '1h' | 'today' | '24h' | '7d' | '30d';
 
 export default function OverviewPage() {
   const user = useAuthStore((s) => s.user);
@@ -126,16 +127,21 @@ export default function OverviewPage() {
 
   const logsCount = overview?.total_firewall_logs || 0;
   const lifetimeCount = overview?.lifetime_firewall_logs || 0;
-  const activeModules = overview?.live_modules || 0;
-  const totalModules = overview?.total_modules || 6;
-  const isHealthy = activeModules >= totalModules - 1;
-  const activeThreats = overview?.active_threats || overview?.threats?.active_threats_count || 0;
+  const activeModules = overview?.live_modules ?? (overview?.modules ? Object.values(overview.modules).filter(m => m.status === 'online').length : 0);
+  const totalModules = overview?.total_modules || (overview?.modules ? Object.keys(overview.modules).length : 6);
+  const isHealthy = activeModules >= Math.max(totalModules - 1, 1);
+  const activeThreats = overview?.active_threats ?? overview?.threats?.active_threats_count ?? 0;
   const dbLoad = overview?.db_load_pct ?? 20;
 
   // Real traffic data from multi-firewall aggregation (or fallback if empty)
   const trafficData = (overview?.traffic_points && overview.traffic_points.length > 0)
     ? overview.traffic_points
     : (overview?.traffic_24h && overview.traffic_24h.length > 0 ? overview.traffic_24h : []);
+
+  const totalAllowed = trafficData.reduce((acc, curr) => acc + (curr.allowed || 0), 0);
+  const totalDenied = trafficData.reduce((acc, curr) => acc + (curr.denied || 0), 0);
+  const totalTraffic = totalAllowed + totalDenied;
+  const deniedPct = totalTraffic > 0 ? ((totalDenied / totalTraffic) * 100).toFixed(1) : '0.0';
 
   // Real threat distribution (or curated fallback palette)
   const threatData = overview?.threats?.distribution && overview.threats.distribution.length > 0
@@ -150,6 +156,15 @@ export default function OverviewPage() {
 
   const totalThreatValue = threatData.reduce((acc, curr) => acc + curr.value, 0) || 1;
 
+  const moduleHrefMap: Record<string, string> = {
+    forti: '/firewall/isfw',
+    fgdc: '/firewall/fgdc',
+    palo: '/firewall/palo-alto',
+    crowdstrike: '/edr',
+    cyberark: '/pam',
+    db_monitor: '/db',
+  };
+
   // Real modules map
   const modulesList = overview?.modules ? Object.entries(overview.modules).map(([key, mod]) => {
     let fallbackName = key;
@@ -163,6 +178,7 @@ export default function OverviewPage() {
 
     return {
       key,
+      href: moduleHrefMap[key] || '/overview',
       name: mod.name || mod.label || fallbackName,
       type: mod.type || fallbackType,
       status: mod.status || 'online',
@@ -175,6 +191,7 @@ export default function OverviewPage() {
 
   const rangeLabels: Record<TimeRangeKey, string> = {
     '1h': 'Last 1 Hour (5-Min Intervals)',
+    'today': 'Today (Cumulative Since 00:00:00)',
     '24h': 'Last 24 Hours (Hourly Buckets)',
     '7d': 'Last 7 Days (Daily Aggregation)',
     '30d': 'Last 30 Days (Monthly Volumetric)',
@@ -203,11 +220,11 @@ export default function OverviewPage() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Time Range Selector */}
           <div className="flex items-center rounded-xl bg-slate-900/90 p-1 border border-slate-800 shadow-inner">
-            {(['1h', '24h', '7d', '30d'] as const).map((rng) => (
+            {(['1h', 'today', '24h', '7d', '30d'] as const).map((rng) => (
               <button
                 key={rng}
                 onClick={() => setSelectedRange(rng)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
                   selectedRange === rng
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                     : 'text-slate-400 hover:text-slate-200'
@@ -241,7 +258,7 @@ export default function OverviewPage() {
           <div className="glass-card px-4 py-2 flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full animate-pulse ${isHealthy ? 'bg-emerald-400 shadow-[0_0_10px_#34d399]' : 'bg-rose-400 shadow-[0_0_10px_#fb7185]'}`} />
             <span className="text-xs font-bold tracking-widest uppercase text-slate-300">
-              System {isHealthy ? 'Healthy' : 'Degraded'}
+              System {isHealthy ? 'Operational' : 'Degraded'}
             </span>
           </div>
         </div>
@@ -258,10 +275,10 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title={`Total Firewall Logs (${selectedRange.toUpperCase()})`}
-          subtitle={lifetimeCount > 0 ? `Lifetime: ${(lifetimeCount / 1000000).toFixed(1)}M logs` : 'Palo Alto + FGDC + ISFW'}
+          subtitle={selectedRange === 'today' ? 'Palo Alto + FGDC + ISFW (Today)' : lifetimeCount > 0 ? `Lifetime: ${(lifetimeCount / 1000000).toFixed(1)}M logs` : 'Palo Alto + FGDC + ISFW'}
           value={logsCount.toLocaleString()}
           icon={<Shield className="text-cyan-400" />}
-          trend={selectedRange === '1h' ? 'Live Stream' : selectedRange === '30d' ? '30-Day Sum' : '+8.4%'}
+          trend={selectedRange === '1h' ? 'Live Stream' : selectedRange === 'today' ? 'Today Cumulative' : selectedRange === '30d' ? '30-Day Sum' : '+8.4%'}
           trendUp={true}
           color="cyan"
         />
@@ -270,7 +287,7 @@ export default function OverviewPage() {
           subtitle="Critical & High Threat Events"
           value={activeThreats.toLocaleString()}
           icon={<ShieldAlert className="text-rose-400" />}
-          trend={activeThreats > 3000 ? 'Active Shield' : 'Normal'}
+          trend={activeThreats > 2500 ? 'Active Monitoring' : 'Normal'}
           trendUp={false}
           color="rose"
         />
@@ -279,8 +296,8 @@ export default function OverviewPage() {
           subtitle="EDR, PAM, Firewalls, DB"
           value={`${activeModules} / ${totalModules}`}
           icon={<Activity className="text-emerald-400" />}
-          trend="100% Operational"
-          trendUp={true}
+          trend={activeModules === totalModules ? '100% Operational' : `${Math.round((activeModules / (totalModules || 1)) * 100)}% Operational`}
+          trendUp={isHealthy}
           color="emerald"
         />
         <StatCard
@@ -288,8 +305,8 @@ export default function OverviewPage() {
           subtitle="Real-time Query Concurrency"
           value={`${dbLoad}%`}
           icon={<Database className="text-violet-400" />}
-          trend="Optimal"
-          trendUp={true}
+          trend={dbLoad < 75 ? 'Optimal' : dbLoad < 90 ? 'Elevated' : 'High Load'}
+          trendUp={dbLoad < 85}
           color="violet"
         />
       </div>
@@ -300,12 +317,15 @@ export default function OverviewPage() {
         <div className="glass-card p-6 lg:col-span-2 flex flex-col gap-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-bold text-slate-100">
                   Unified Network Traffic ({selectedRange.toUpperCase()})
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                   Multi-Firewall Live
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  Blocked: {deniedPct}% ({totalDenied.toLocaleString()})
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -317,11 +337,11 @@ export default function OverviewPage() {
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
-                <span className="text-slate-300 font-medium">Allowed Traffic</span>
+                <span className="text-slate-300 font-medium">Allowed: <span className="font-mono text-emerald-400 font-semibold">{totalAllowed.toLocaleString()}</span></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" />
-                <span className="text-slate-300 font-medium">Denied / Blocked</span>
+                <span className="text-slate-300 font-medium">Denied: <span className="font-mono text-rose-400 font-semibold">{totalDenied.toLocaleString()}</span></span>
               </div>
             </div>
           </div>
@@ -474,12 +494,14 @@ export default function OverviewPage() {
                 <th className="pb-3 font-semibold">Live State</th>
                 <th className="pb-3 font-semibold">Last Heartbeat / Event</th>
                 <th className="pb-3 font-semibold text-right">Telemetry Records</th>
+                <th className="pb-3 font-semibold text-right">Console</th>
               </tr>
             </thead>
             <tbody>
               {modulesList.map((m) => (
                 <ModuleRow
                   key={m.key}
+                  href={m.href}
                   name={m.name}
                   type={m.type}
                   status={m.status}
@@ -637,7 +659,8 @@ function ModuleRow({
   count, 
   latest, 
   activeAlerts, 
-  activeSessions 
+  activeSessions,
+  href,
 }: { 
   name: string; 
   type: string; 
@@ -646,14 +669,25 @@ function ModuleRow({
   latest?: string; 
   activeAlerts?: number; 
   activeSessions?: number; 
+  href?: string;
 }) {
   const isOnline = status === 'online';
 
   return (
-    <tr className="border-b border-slate-700/30 last:border-0 hover:bg-slate-800/40 transition-colors">
-      <td className="py-3.5 font-semibold text-slate-100 flex items-center gap-2.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-        {name}
+    <tr className="border-b border-slate-700/30 last:border-0 hover:bg-slate-800/40 transition-colors group">
+      <td className="py-3.5 font-semibold text-slate-100">
+        {href ? (
+          <Link href={href} className="inline-flex items-center gap-2 text-slate-100 hover:text-cyan-400 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform" />
+            <span>{name}</span>
+            <ArrowUpRight size={13} className="text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+          </Link>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <span>{name}</span>
+          </div>
+        )}
       </td>
       <td className="py-3.5 text-slate-400 font-medium">
         <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/50 text-[11px] text-slate-300">
@@ -681,6 +715,19 @@ function ModuleRow({
             {activeSessions} active 24h
           </span>
         ) : null}
+      </td>
+      <td className="py-3.5 text-right">
+        {href ? (
+          <Link
+            href={href}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/60 hover:bg-cyan-500/15 text-slate-400 hover:text-cyan-300 border border-slate-700/60 hover:border-cyan-500/30 transition-all shadow-sm"
+          >
+            <span>View</span>
+            <ArrowUpRight size={12} />
+          </Link>
+        ) : (
+          <span className="text-slate-600">-</span>
+        )}
       </td>
     </tr>
   );
